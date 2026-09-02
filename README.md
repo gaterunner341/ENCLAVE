@@ -12,6 +12,15 @@ It is a single executable. No installer, no database, no service account, no
 outbound connection. It listens on the loopback address and stores everything
 in a folder next to itself.
 
+## Getting it
+
+A current Windows build sits at `ENCLAVE.exe` in the root of this repository.
+Download it, put it wherever you like, and double-click. Nothing to install.
+
+Every push also builds one under the CI workflow's artifacts, and the Release
+workflow can be run on demand from the Actions tab to publish a zip with a
+checksum.
+
 ## Running it
 
 ```
