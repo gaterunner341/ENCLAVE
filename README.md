@@ -11,14 +11,23 @@ you know?**
 It is a single executable with no dependencies outside the Go standard library.
 No installer, no database engine, no service account, no outbound connection.
 
+## Get it
+
+A current Windows build sits at **[`ENCLAVE.exe`](ENCLAVE.exe)** in the root of
+this repository. Download it, put it anywhere, and double-click. Nothing to
+install.
+
+Every push also builds one under the CI workflow's artifacts, and the Release
+workflow publishes builds for Windows, macOS and Linux with checksums.
+
 ## Run it
 
 No installer, no database, no admin rights.
 
 ```
-go run ./cmd/enclave          # from source
-./enclave                     # from a built binary
 ENCLAVE.exe                   # on Windows, or just double-click it
+./enclave                     # a built binary on macOS or Linux
+go run ./cmd/enclave          # from source
 ```
 
 It serves on <http://127.0.0.1:8080> and opens a browser. Press Ctrl+C to stop.

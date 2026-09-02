@@ -1,4 +1,5 @@
-# build output
+# Local build output. The Windows build published for download is committed
+# deliberately as ENCLAVE.exe in the repository root, so it is not listed here.
 /enclave
 /enclave.exe
 /dist/

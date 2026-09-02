@@ -4,7 +4,18 @@ Nothing to install. No database, no web server, no admin rights.
 
 ---
 
-## If somebody handed you the executable
+## Where to get it
+
+A current Windows build is committed at **`ENCLAVE.exe`** in the root of this
+repository. Open it on GitHub and use the download button.
+
+Every push to the repository also builds one, available under that run's
+artifacts on the Actions tab. Tagged releases carry builds for Windows, macOS
+and Linux with a `SHA256SUMS.txt`.
+
+Building it yourself takes one command and is covered further down.
+
+## Running the executable
 
 **Windows**
 
