@@ -1,0 +1,60 @@
+{{template "head" .}}
+{{$d := .Data}}{{$s := $d.Summary}}{{$scan := $d.Scan}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Import complete</h1>
+    <p class="lede">{{$scan.Title}} was read as {{$scan.Format}} and applied.</p>
+  </div>
+  <div>
+    <a class="btn" href="/scans/{{$s.ScanID}}">Open the import</a>
+    <a class="btn primary" href="/enclaves/{{$scan.EnclaveID}}/baseline">See the gap analysis</a>
+  </div>
+</div>
+
+<div class="grid four" style="margin-bottom: 1.25rem">
+  <div class="stat"><div class="label">Findings added</div><div class="value">{{comma $s.FindingsAdded}}</div></div>
+  <div class="stat"><div class="label">Findings updated</div><div class="value">{{comma $s.FindingsUpdated}}</div>
+    <div class="note">already known, refreshed</div></div>
+  <div class="stat"><div class="label">Assets matched</div><div class="value">{{comma $s.AssetsMatched}}</div>
+    <div class="note">{{comma $s.AssetsCreated}} created</div></div>
+  <div class="stat"><div class="label">Unmapped</div><div class="value">{{comma $s.Unmapped}}</div>
+    <div class="note">reached no control</div></div>
+</div>
+
+{{if gt (len $s.Placed) 1}}
+<div class="card">
+  <header><h3>Where the assets landed</h3></header>
+  <div class="table-wrap"><table><tbody>
+    {{range $id, $n := $s.Placed}}
+    <tr><td>{{with index $d.Enclaves $id}}<a href="/enclaves/{{.ID}}">{{.Name}}</a>{{else}}{{$id}}{{end}}</td>
+      <td class="num">{{$n}} assets</td></tr>
+    {{end}}
+  </tbody></table></div>
+</div>
+{{end}}
+
+{{if $s.Warnings}}
+<div class="card">
+  <header><h3>Warnings</h3></header>
+  <div class="card-body">
+    <ul style="margin: 0; padding-left: 1.2rem; color: var(--text-2)">
+      {{range $s.Warnings}}<li>{{.}}</li>{{end}}
+    </ul>
+  </div>
+</div>
+{{end}}
+
+{{if $s.Unmapped}}
+<div class="notice warn">
+  {{comma $s.Unmapped}} open findings carried no identifier that any loaded mapping table
+  recognised, so they are not attributed to a control yet. There are {{$d.MappingCount}} tables
+  loaded. For STIG results, importing DISA's full CCI list is usually what closes this.
+  <div style="margin-top: .5rem"><a class="btn small" href="/mappings">Review mappings</a></div>
+</div>
+{{end}}
+
+<div class="form-actions">
+  <a class="btn" href="/import">Import another file</a>
+  <a class="btn" href="/enclaves/{{$scan.EnclaveID}}/findings">Review the findings</a>
+</div>
+{{template "foot" .}}

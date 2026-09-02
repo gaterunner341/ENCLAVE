@@ -1,0 +1,28 @@
+{{template "head" .}}
+{{$d := .Data}}{{$e := .Enclave}}
+<div class="page-head"><div class="grow"><h1>Baseline</h1></div></div>
+<div class="card"><div class="empty">
+  <h3>No control baseline is assigned to {{$e.Name}}</h3>
+  <p>Pick a framework to measure this enclave against. Findings already imported are mapped to it
+     as soon as it is assigned, so the gap analysis is populated straight away.</p>
+  {{if not .ReadOnly}}
+  <form method="post" action="/enclaves/{{$e.ID}}/baselines" style="max-width: 460px; margin: 1rem auto 0; text-align: left">
+    <div class="field">
+      <label for="baseline">Framework and profile</label>
+      <select name="baseline" id="baseline">
+        {{range $d.Catalogs}}{{if .Controls}}
+        <optgroup label="{{.Name}}">
+          <option value="{{.ID}}|">Every control ({{len .Controls}})</option>
+          {{$cid := .ID}}{{$c := .}}
+          {{range .Profiles}}<option value="{{$cid}}|{{.ID}}">{{.Name}} ({{$c.Count .ID}})</option>{{end}}
+        </optgroup>
+        {{end}}{{end}}
+      </select>
+    </div>
+    <button class="btn primary" type="submit">Assign baseline</button>
+  </form>
+  <p style="margin-top: 1rem">Your own framework works here too:
+     <a href="/catalogs">load a catalogue</a> from OSCAL, CSV or the plain text format.</p>
+  {{end}}
+</div></div>
+{{template "foot" .}}

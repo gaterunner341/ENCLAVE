@@ -1,0 +1,50 @@
+<?xml version="1.0" ?>
+<NessusClientData_v2>
+<Policy><policyName>Credentialed Internal Scan</policyName></Policy>
+<Report name="Weekly internal scan">
+  <ReportHost name="10.20.4.11">
+    <HostProperties>
+      <tag name="host-ip">10.20.4.11</tag>
+      <tag name="host-fqdn">app-srv-01.example.org</tag>
+      <tag name="netbios-name">APP-SRV-01</tag>
+      <tag name="operating-system">Microsoft Windows Server 2022 Standard</tag>
+      <tag name="mac-address">00:50:56:9A:11:22</tag>
+      <tag name="HOST_START">Mon Aug 25 03:14:00 2025</tag>
+    </HostProperties>
+    <ReportItem port="0" svc_name="general" protocol="tcp" severity="4" pluginID="200001" pluginName="Windows Server 2022 Missing Critical Update KB5041160" pluginFamily="Windows : Microsoft Bulletins">
+      <description>The remote host is missing a security update.</description>
+      <solution>Apply the vendor update.</solution>
+      <risk_factor>Critical</risk_factor>
+      <cve>CVE-2025-21001</cve>
+      <cvss3_base_score>9.8</cvss3_base_score>
+      <cvss3_vector>CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H</cvss3_vector>
+    </ReportItem>
+    <ReportItem port="3389" svc_name="msrdp" protocol="tcp" severity="2" pluginID="200002" pluginName="Terminal Services Encryption Level is Medium or Low" pluginFamily="Misc.">
+      <description>The remote Terminal Services is not configured to use strong cryptography.</description>
+      <solution>Change RDP encryption level to FIPS compliant.</solution>
+      <risk_factor>Medium</risk_factor>
+      <cvss3_base_score>5.3</cvss3_base_score>
+    </ReportItem>
+    <ReportItem port="0" svc_name="general" protocol="tcp" severity="0" pluginID="19506" pluginName="Nessus Scan Information" pluginFamily="Settings">
+      <description>Information about the scan.</description>
+      <risk_factor>None</risk_factor>
+    </ReportItem>
+  </ReportHost>
+  <ReportHost name="10.20.9.2">
+    <HostProperties>
+      <tag name="host-ip">10.20.9.2</tag>
+      <tag name="operating-system">Cisco IOS XE Software, Version 17.9.4</tag>
+      <tag name="system-type">router</tag>
+      <tag name="HOST_START">Mon Aug 25 03:20:00 2025</tag>
+    </HostProperties>
+    <ReportItem port="0" svc_name="general" protocol="tcp" severity="3" pluginID="200010" pluginName="Cisco IOS XE Software Web UI Privilege Escalation" pluginFamily="CISCO">
+      <description>The remote device is affected by a privilege escalation vulnerability.</description>
+      <solution>Upgrade to a fixed release.</solution>
+      <risk_factor>High</risk_factor>
+      <cve>CVE-2023-20198</cve>
+      <cvss3_base_score>10.0</cvss3_base_score>
+      <stig_severity>I</stig_severity>
+    </ReportItem>
+  </ReportHost>
+</Report>
+</NessusClientData_v2>

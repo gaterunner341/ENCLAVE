@@ -1,0 +1,137 @@
+{{template "head" .}}
+{{$d := .Data}}{{$e := $d.Enclave}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs"><a href="/enclaves">Enclaves</a>{{if not $d.IsNew}} / <a href="/enclaves/{{$e.ID}}">{{$e.Name}}</a>{{end}}</div>
+    <h1>{{if $d.IsNew}}New enclave{{else}}Settings{{end}}</h1>
+  </div>
+</div>
+
+<form method="post" action="{{if $d.IsNew}}/enclaves/new{{else}}/enclaves/{{$e.ID}}/edit{{end}}">
+<div class="split">
+  <div>
+    <div class="card">
+      <header><h2>Identity</h2></header>
+      <div class="card-body">
+        <div class="field">
+          <label for="name">Name
+            <span class="hint">What people call this system.</span></label>
+          <input type="text" id="name" name="name" value="{{$e.Name}}" required autofocus>
+        </div>
+        {{if $d.IsNew}}
+        <div class="field">
+          <label for="id">Identifier
+            <span class="hint">Used in URLs and exports. Left blank, it is derived from the name.</span></label>
+          <input type="text" id="id" name="id" placeholder="derived from the name">
+        </div>
+        {{end}}
+        <div class="field">
+          <label for="description">Description</label>
+          <textarea id="description" name="description">{{$e.Description}}</textarea>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="owner">System owner</label>
+            <input type="text" id="owner" name="owner" value="{{$e.Owner}}"></div>
+          <div class="field"><label for="security_contact">Security contact</label>
+            <input type="text" id="security_contact" name="security_contact" value="{{$e.SecurityContact}}"></div>
+          <div class="field"><label for="organization">Organisation</label>
+            <input type="text" id="organization" name="organization" value="{{$e.Organization}}"></div>
+          <div class="field"><label for="location">Location</label>
+            <input type="text" id="location" name="location" value="{{$e.Location}}"></div>
+          <div class="field"><label for="environment">Environment</label>
+            <select id="environment" name="environment">
+              <option value=""></option>
+              {{range environments}}<option value="{{.}}" {{if eq . $e.Environment}}selected{{end}}>{{.}}</option>{{end}}
+            </select></div>
+          <div class="field"><label for="status">Lifecycle status</label>
+            <select id="status" name="status">
+              <option value=""></option>
+              {{range enclaveStates}}<option value="{{.}}" {{if eq . $e.Status}}selected{{end}}>{{.}}</option>{{end}}
+            </select></div>
+          <div class="field"><label for="tags">Tags
+            <span class="hint">Comma separated.</span></label>
+            <input type="text" id="tags" name="tags" value="{{join ", " $e.Tags}}"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>Address ranges</h2></header>
+      <div class="card-body">
+        <div class="field">
+          <label for="networks">Networks
+            <span class="hint">One CIDR range per line, optionally followed by a label.
+              An imported asset is placed into the enclave whose range matches its address most
+              specifically, so a management VLAN carved out of a site range wins over the site.</span></label>
+          <textarea id="networks" name="networks" class="mono" rows="6" placeholder="10.20.0.0/16 Core&#10;10.20.9.0/24 Management VLAN">{{range $e.Networks}}{{.CIDR}}{{if .Label}} {{.Label}}{{end}}
+{{end}}</textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h2>Categorisation</h2></header>
+      <div class="card-body">
+        <p style="color: var(--text-2); font-size: .82rem">The overall impact level is the highest
+          of the three, and it scales this enclave's risk index. Read Low, Moderate and High as
+          any three-tier scale if your organisation does not use FIPS 199.</p>
+        <div class="form-grid">
+          <div class="field"><label for="confidentiality">Confidentiality</label>
+            <select id="confidentiality" name="confidentiality">
+              {{range impacts}}<option value="{{.}}" {{if eq . $e.Confidentiality}}selected{{end}}>{{.Label}}</option>{{end}}
+            </select></div>
+          <div class="field"><label for="integrity">Integrity</label>
+            <select id="integrity" name="integrity">
+              {{range impacts}}<option value="{{.}}" {{if eq . $e.Integrity}}selected{{end}}>{{.Label}}</option>{{end}}
+            </select></div>
+          <div class="field"><label for="availability">Availability</label>
+            <select id="availability" name="availability">
+              {{range impacts}}<option value="{{.}}" {{if eq . $e.Availability}}selected{{end}}>{{.Label}}</option>{{end}}
+            </select></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>Authorisation</h2></header>
+      <div class="card-body">
+        <div class="field"><label for="authorization_status">Status</label>
+          <select id="authorization_status" name="authorization_status">
+            <option value=""></option>
+            {{range authStatuses}}<option value="{{.}}" {{if eq . $e.AuthorizationStatus}}selected{{end}}>{{.}}</option>{{end}}
+          </select></div>
+        <div class="field"><label for="authorization_expires">Expires</label>
+          <input type="date" id="authorization_expires" name="authorization_expires" value="{{dateInput $e.AuthorizationExpires}}"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="form-actions">
+  <button class="btn primary" type="submit">{{if $d.IsNew}}Create enclave{{else}}Save changes{{end}}</button>
+  {{if not $d.IsNew}}<a class="btn" href="/enclaves/{{$e.ID}}">Cancel</a>{{end}}
+  <span class="spacer"></span>
+</div>
+</form>
+
+{{if not $d.IsNew}}
+<div class="card" style="margin-top: 2rem; border-color: color-mix(in srgb, var(--bad) 30%, var(--border))">
+  <header><h3 style="color: var(--bad)">Delete this enclave</h3></header>
+  <div class="card-body">
+    <p>Deleting <strong>{{$e.Name}}</strong> also deletes its assets, findings, imports,
+       assessments and risk entries. There is no undo.</p>
+    <form method="post" action="/enclaves/{{$e.ID}}/delete"
+          data-confirm="Delete {{$e.Name}} and everything recorded against it?"
+          style="display: flex; gap: .5rem; align-items: flex-end; max-width: 460px">
+      <div class="field" style="margin: 0; flex: 1">
+        <label for="confirm">Type the enclave name to confirm</label>
+        <input type="text" id="confirm" name="confirm" placeholder="{{$e.Name}}" autocomplete="off">
+      </div>
+      <button class="btn danger" type="submit">Delete</button>
+    </form>
+  </div>
+</div>
+{{end}}
+{{template "foot" .}}

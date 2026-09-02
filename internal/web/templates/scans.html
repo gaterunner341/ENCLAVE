@@ -1,0 +1,45 @@
+{{template "head" .}}
+{{$d := .Data}}{{$e := .Enclave}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Imports</h1>
+    <p class="lede">Every result file loaded against {{$e.Name}}. Deleting an import removes the
+      findings it produced, which is how a mistaken load is undone.</p>
+  </div>
+  {{if not .ReadOnly}}<div><a class="btn primary" href="/import?enclave={{$e.ID}}">Import results</a></div>{{end}}
+</div>
+
+<div class="card">
+  {{if $d.Scans}}
+  <div class="table-wrap">
+    <table data-sortable>
+      <thead><tr><th data-sort="text">Title</th><th data-sort="text">Format</th>
+        <th data-sort="text">Benchmark</th><th class="num" data-sort="number">Assets</th>
+        <th class="num" data-sort="number">Results</th><th data-sort="text">Scan date</th>
+        <th data-sort="text">Imported</th><th data-sort="text">By</th></tr></thead>
+      <tbody>{{range $d.Scans}}
+      <tr>
+        <td class="wrap"><a href="/scans/{{.ID}}"><strong>{{truncate 70 .Title}}</strong></a>
+          {{if .Filename}}<div class="mono" style="color: var(--text-3); font-size: .74rem">{{.Filename}}</div>{{end}}</td>
+        <td><span class="badge plain">{{.Format}}</span> <span style="color: var(--text-3); font-size: .78rem">{{.Kind}}</span></td>
+        <td style="font-size: .8rem">{{if .BenchmarkID}}{{truncate 40 .BenchmarkID}}
+          {{if .Version}}<div style="color: var(--text-3); font-size: .76rem">{{.Version}}</div>{{end}}{{else}}—{{end}}</td>
+        <td class="num">{{len .AssetIDs}}</td>
+        <td class="num">{{comma .Total}}</td>
+        <td>{{date .ScanDate}}</td>
+        <td>{{since .ImportedAt}}</td>
+        <td>{{if .ImportedBy}}{{.ImportedBy}}{{else}}—{{end}}</td>
+      </tr>
+      {{end}}</tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="empty">
+    <h3>Nothing imported yet</h3>
+    <p>ENCLAVE reads STIG checklists, SCAP results, Nessus and ACAS exports, and any spreadsheet
+       you can map columns for.</p>
+    {{if not .ReadOnly}}<a class="btn primary" href="/import?enclave={{$e.ID}}">Import results</a>{{end}}
+  </div>
+  {{end}}
+</div>
+{{template "foot" .}}

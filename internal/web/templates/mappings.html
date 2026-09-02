@@ -1,0 +1,102 @@
+{{template "head" .}}
+{{$d := .Data}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Control mappings</h1>
+    <p class="lede">A STIG rule cites CCIs; a Nessus plugin cites CVEs; a benchmark item cites a
+      section number. None of those is a control identifier. These tables do the translation, and
+      anything they cannot translate is reported as unmapped rather than guessed at.</p>
+  </div>
+  {{if not .ReadOnly}}
+  <div>
+    <form method="post" action="/mappings/reannotate" style="display: inline">
+      <button class="btn" type="submit">Re-check every finding</button>
+    </form>
+  </div>
+  {{end}}
+</div>
+
+{{if $d.Unmapped}}
+<div class="notice warn">
+  {{comma $d.Unmapped}} open findings across every enclave reach no control at all.
+  For STIG and SCAP results, loading DISA's <span class="mono">U_CCI_List.xml</span> below is
+  normally what fixes it.
+</div>
+{{end}}
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Mapping</th><th>Reads</th><th>Targets</th><th class="num">Entries</th><th></th></tr></thead>
+      <tbody>
+      {{range $d.Sets}}
+      <tr>
+        <td><a href="/mappings/{{.ID}}"><strong>{{.Name}}</strong></a>
+          {{if .Note}}<div style="color: var(--text-3); font-size: .78rem; max-width: 56ch">{{.Note}}</div>{{end}}
+          <div>{{if .BuiltIn}}<span class="badge plain">ships with ENCLAVE</span>{{else}}<span class="badge gap-planned">imported</span>{{end}}</div></td>
+        <td>{{.Scheme.Label}}</td>
+        <td class="mono" style="font-size: .8rem">{{.Target}}</td>
+        <td class="num">{{comma .Size}}</td>
+        <td>{{if and (not .BuiltIn) (not $.ReadOnly)}}
+          <form method="post" action="/mappings/{{.ID}}/delete" data-confirm="Remove {{.Name}}?">
+            <button class="btn small danger" type="submit">Remove</button></form>{{end}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{{if not .ReadOnly}}
+<div class="split">
+  <div class="card">
+    <header><h2>Load a mapping</h2></header>
+    <div class="card-body">
+      <form method="post" action="/mappings/import" enctype="multipart/form-data">
+        <div class="field">
+          <label for="file">File
+            <span class="hint">DISA's U_CCI_List.xml, or a CSV of key and control.</span></label>
+          <input type="file" id="file" name="file" required accept=".xml,.csv,.txt">
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="name">Name</label>
+            <input type="text" id="name" name="name" placeholder="taken from the file"></div>
+          <div class="field"><label for="scheme">Keys are</label>
+            <select id="scheme" name="scheme"><option value="">taken from the file</option>
+              {{range $d.Schemes}}<option value="{{.}}">{{.Label}}</option>{{end}}
+            </select></div>
+          <div class="field"><label for="target">Maps to</label>
+            <select id="target" name="target"><option value="">taken from the file</option>
+              {{range $d.Catalogs}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+            </select></div>
+        </div>
+        <button class="btn primary" type="submit">Load</button>
+      </form>
+      <p style="margin: .75rem 0 0; color: var(--text-3); font-size: .8rem">
+        Loading a table re-checks every finding already imported, so evidence appears without
+        re-importing anything.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>The CSV format</h2></header>
+    <div class="card-body">
+      <p style="color: var(--text-2); font-size: .85rem">Two columns: a key and the controls it
+        maps to. Rows beginning with a hash set the table's metadata.</p>
+      <pre class="prose box mono" style="white-space: pre">#name,Local crosswalk to our standard
+#scheme,control
+#target,acme-secure-build
+
+key,controls
+AC-2,"HD-2,HD-3"
+CM-6,HD-1
+SI-2,"HD-4,HD-5"</pre>
+      <p style="margin: .75rem 0 0; color: var(--text-2); font-size: .85rem">
+        A <span class="mono">control</span> scheme is a crosswalk: it takes a finding that already
+        resolved to a control in one framework and carries it into another. That is how a STIG
+        result reaches a CIS safeguard without a per-rule table.</p>
+    </div>
+  </div>
+</div>
+{{end}}
+{{template "foot" .}}

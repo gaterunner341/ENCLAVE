@@ -1,0 +1,185 @@
+{{template "head" .}}
+{{$d := .Data}}{{$e := .Enclave}}{{$r := $d.Risk}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs"><a href="/enclaves">Enclaves</a></div>
+    <h1>{{$e.Name}}</h1>
+    {{if $e.Description}}<p class="lede">{{$e.Description}}</p>{{end}}
+  </div>
+  <div>
+    {{if not .ReadOnly}}<a class="btn" href="/import?enclave={{$e.ID}}">Import results</a>
+    <a class="btn" href="/enclaves/{{$e.ID}}/edit">Settings</a>{{end}}
+  </div>
+</div>
+
+<div class="grid four" style="margin-bottom: 1.25rem">
+  <div class="stat"><div class="label">Risk index</div>
+    <div class="value {{bandClass $r.Band}}">{{num $r.Index}}</div>
+    <div class="note {{bandClass $r.Band}}">{{$r.Band}}</div></div>
+  <div class="stat"><div class="label">Assets</div><div class="value">{{comma $r.Assets}}</div>
+    <div class="note">{{if $r.StaleAssets}}{{$r.StaleAssets}} not seen in 45 days{{else}}all seen recently{{end}}</div></div>
+  <div class="stat"><div class="label">Open findings</div><div class="value">{{comma $r.Open}}</div>
+    <div class="note">{{if $r.Overdue}}{{$r.Overdue}} past target{{else}}none past target{{end}}</div></div>
+  <div class="stat"><div class="label">Open risk entries</div><div class="value">{{comma $d.OpenRisks}}</div>
+    <div class="note"><a href="/enclaves/{{$e.ID}}/risk">Risk register</a></div></div>
+</div>
+
+<div class="split">
+  <div>
+    <div class="card">
+      <header><h2>Control baselines</h2><span class="spacer"></span>
+        <a class="btn small" href="/enclaves/{{$e.ID}}/baseline">Open gap analysis</a></header>
+      {{if $d.Analyses}}
+      <div class="table-wrap"><table>
+        <thead><tr><th>Baseline</th><th class="num">Controls</th><th style="width: 200px">State</th>
+          <th class="num">Coverage</th><th class="num">Verified</th><th class="num">Open gaps</th></tr></thead>
+        <tbody>
+        {{range $d.Analyses}}
+        <tr>
+          <td><a href="/enclaves/{{$e.ID}}/baseline?catalog={{.Catalog.ID}}"><strong>{{.Catalog.Name}}</strong></a>
+            <div style="color: var(--text-3); font-size: .78rem">{{.Catalog.ProfileName .ProfileID}}</div></td>
+          <td class="num">{{comma .Total}}</td>
+          <td>{{template "gapbar" dict "Counts" .Counts "Total" .Total}}</td>
+          <td class="num">{{pct .Coverage}}</td>
+          <td class="num">{{pct .Verified}}</td>
+          <td class="num">{{.OpenCount}}</td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table></div>
+      {{else}}
+      <div class="empty">
+        <h3>No baseline assigned</h3>
+        <p>Assign a control framework to measure this enclave against. Findings imported already
+           will be mapped to it straight away.</p>
+      </div>
+      {{end}}
+      {{if not .ReadOnly}}
+      <div class="card-body" style="border-top: 1px solid var(--border); background: var(--surface-2)">
+        <form method="post" action="/enclaves/{{$e.ID}}/baselines" style="display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap">
+          <div class="field" style="margin: 0; min-width: 340px; flex: 1">
+            <label for="baseline">Add or update a baseline</label>
+            <select name="baseline" id="baseline">
+              {{range $d.Available}}{{if .Controls}}
+              <optgroup label="{{.Name}}">
+                <option value="{{.ID}}|">Every control ({{len .Controls}})</option>
+                {{$cid := .ID}}{{$c := .}}
+                {{range .Profiles}}<option value="{{$cid}}|{{.ID}}">{{.Name}} ({{$c.Count .ID}})</option>{{end}}
+              </optgroup>
+              {{end}}{{end}}
+            </select>
+          </div>
+          <button class="btn primary" type="submit">Apply</button>
+        </form>
+        <p style="margin: .5rem 0 0; color: var(--text-3); font-size: .8rem">
+          Assigning a baseline re-checks every finding already imported against it, so the gap
+          analysis is populated immediately.</p>
+        {{range $e.Baselines}}
+        <form method="post" action="/enclaves/{{$e.ID}}/baselines" style="display: inline">
+          <input type="hidden" name="action" value="remove">
+          <input type="hidden" name="catalog_id" value="{{.CatalogID}}">
+          <button class="btn small danger" type="submit">Remove {{.CatalogID}}</button>
+        </form>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+
+    <div class="card">
+      <header><h3>Assets by type</h3><span class="spacer"></span>
+        <a class="btn small" href="/enclaves/{{$e.ID}}/assets">All assets</a></header>
+      <div class="card-body">
+        {{if $d.TypeOrder}}
+        <div class="bars">
+          {{$max := 0}}{{range $k, $v := $d.ByType}}{{if gt $v $max}}{{$max = $v}}{{end}}{{end}}
+          {{range $d.TypeOrder}}
+          <div class="bar">
+            <span>{{.}}</span>
+            <span class="track"><span class="fill" style="width: {{printf "%.1f%%" (ratio (index $d.ByType .) $max)}}"></span></span>
+            <span class="n">{{index $d.ByType .}}</span>
+          </div>
+          {{end}}
+        </div>
+        {{else}}<p style="color: var(--text-3); margin: 0">No assets recorded yet.</p>{{end}}
+      </div>
+    </div>
+
+    {{if $d.Overdue}}
+    <div class="card">
+      <header><h3>Past the remediation target</h3><span class="spacer"></span>
+        <a class="btn small" href="/enclaves/{{$e.ID}}/findings?overdue=1">All overdue</a></header>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Severity</th><th>Finding</th><th>Asset</th><th class="num">Days open</th></tr></thead>
+        <tbody>
+        {{range $d.Overdue}}
+        <tr><td><span class="badge {{severityClass .Severity}}">{{.Severity.Label}}</span></td>
+          <td class="wrap"><a href="/findings/{{.ID}}">{{truncate 80 .Title}}</a></td>
+          <td>{{template "assetlink" dict "Index" $d.AssetIndex "ID" .AssetID}}</td>
+          <td class="num">{{days .FirstSeen}}</td></tr>
+        {{end}}
+        </tbody>
+      </table></div>
+    </div>
+    {{end}}
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>Open findings by severity</h3></header>
+      <div class="card-body">{{template "donut" dict "D" $d.Severity "T" "Open findings by severity"}}</div>
+    </div>
+
+    <div class="card">
+      <header><h3>Details</h3></header>
+      <div class="card-body">
+        <div class="facts">
+          <div><div class="k">Identifier</div><div class="v mono">{{$e.ID}}</div></div>
+          <div><div class="k">Owner</div><div class="v">{{if $e.Owner}}{{$e.Owner}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Security contact</div><div class="v">{{if $e.SecurityContact}}{{$e.SecurityContact}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Organisation</div><div class="v">{{if $e.Organization}}{{$e.Organization}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Location</div><div class="v">{{if $e.Location}}{{$e.Location}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Environment</div><div class="v">{{if $e.Environment}}{{$e.Environment}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Status</div><div class="v">{{if $e.Status}}{{$e.Status}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Categorisation</div><div class="v">{{$e.Categorization.Label}}
+            <div style="color: var(--text-3); font-size: .78rem">C {{$e.Confidentiality.Label}} · I {{$e.Integrity.Label}} · A {{$e.Availability.Label}}</div></div></div>
+          <div><div class="k">Authorisation</div><div class="v">{{if $e.AuthorizationStatus}}{{$e.AuthorizationStatus}}{{else}}—{{end}}
+            {{if $e.AuthorizationExpires}}<div style="color: var(--text-3); font-size: .78rem">expires {{dateP $e.AuthorizationExpires}}</div>{{end}}</div></div>
+          <div><div class="k">Last scan</div><div class="v">{{if $r.LastScan}}{{dateP $r.LastScan}}{{else}}never{{end}}</div></div>
+        </div>
+        {{if $e.Networks}}
+        <div style="margin-top: 1rem">
+          <div class="k" style="font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); font-weight: 600">Address ranges</div>
+          <table style="margin-top: .35rem">
+            <tbody>{{range $e.Networks}}<tr><td class="mono">{{.CIDR}}</td><td>{{.Label}}</td></tr>{{end}}</tbody>
+          </table>
+        </div>
+        {{end}}
+        {{if $e.Tags}}<div class="pill-row" style="margin-top: 1rem">{{range $e.Tags}}<span class="tag">{{.}}</span>{{end}}</div>{{end}}
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h3>Recent imports</h3><span class="spacer"></span>
+        <a class="btn small" href="/enclaves/{{$e.ID}}/scans">All</a></header>
+      {{if $d.Scans}}
+      <div class="table-wrap"><table>
+        <tbody>{{range $d.Scans}}
+        <tr><td class="wrap"><a href="/scans/{{.ID}}">{{truncate 48 .Title}}</a>
+          <div style="color: var(--text-3); font-size: .76rem">{{.Format}} · {{comma .Total}} results</div></td>
+          <td style="white-space: nowrap; color: var(--text-3)">{{since .ImportedAt}}</td></tr>
+        {{end}}</tbody>
+      </table></div>
+      {{else}}<div class="empty"><p>No scan results have been imported.</p>
+        {{if not .ReadOnly}}<a class="btn" href="/import?enclave={{$e.ID}}">Import some</a>{{end}}</div>{{end}}
+    </div>
+
+    {{if $d.Analyses}}{{if gt (index $d.Analyses 0).UnmappedFindings 0}}
+    <div class="notice warn">
+      {{(index $d.Analyses 0).UnmappedFindings}} open findings reached no control in
+      {{(index $d.Analyses 0).Catalog.Name}}. That is a gap in the
+      <a href="/mappings">mapping tables</a>, not necessarily in the estate.
+    </div>
+    {{end}}{{end}}
+  </div>
+</div>
+{{template "foot" .}}

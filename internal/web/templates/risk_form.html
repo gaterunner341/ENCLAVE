@@ -1,0 +1,128 @@
+{{template "head" .}}
+{{$d := .Data}}{{$r := $d.Entry}}{{$e := .Enclave}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs"><a href="/enclaves/{{$e.ID}}/risk">Risk register</a></div>
+    <h1>{{if $d.IsNew}}New risk entry{{else}}Edit risk entry{{end}}</h1>
+  </div>
+</div>
+
+<form method="post" action="{{if $d.IsNew}}/enclaves/{{$e.ID}}/risk/new{{else}}/risk/{{$r.ID}}/edit{{end}}">
+<div class="split">
+  <div>
+    <div class="card">
+      <header><h2>The risk</h2></header>
+      <div class="card-body">
+        <div class="field"><label for="title">Title</label>
+          <input type="text" id="title" name="title" value="{{$r.Title}}" required autofocus></div>
+        <div class="field"><label for="weakness">Weakness
+          <span class="hint">What is actually wrong, in terms somebody outside the team can read.</span></label>
+          <textarea id="weakness" name="weakness" rows="5">{{$r.Weakness}}</textarea></div>
+        <div class="field"><label for="mitigation">Planned remediation or mitigation</label>
+          <textarea id="mitigation" name="mitigation" rows="5">{{$r.Mitigation}}</textarea></div>
+        <div class="field"><label for="resources">Resources required</label>
+          <textarea id="resources" name="resources" rows="2">{{$r.Resources}}</textarea></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>Milestones</h2></header>
+      <div class="card-body">
+        <p style="color: var(--text-2); font-size: .84rem">Leave a description blank to drop the row.</p>
+        {{range $r.Milestones}}
+        <div class="form-grid">
+          <div class="field" style="grid-column: span 2"><label>Milestone</label>
+            <input type="text" name="milestone_description" value="{{.Description}}"></div>
+          <div class="field"><label>Due</label>
+            <input type="date" name="milestone_due" value="{{dateInput .Due}}"></div>
+        </div>
+        {{end}}
+        {{range seq 3}}
+        <div class="form-grid">
+          <div class="field" style="grid-column: span 2"><label>Milestone</label>
+            <input type="text" name="milestone_description" placeholder="what happens next"></div>
+          <div class="field"><label>Due</label>
+            <input type="date" name="milestone_due"></div>
+        </div>
+        {{end}}
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>Controls affected</h2></header>
+      <div class="card-body">
+        <p style="color: var(--text-2); font-size: .84rem">Identifiers from each framework, comma
+          separated. Anything the catalogue does not recognise is dropped rather than stored.</p>
+        {{range $d.Catalogs}}{{if .Controls}}
+        <div class="field">
+          <label for="controls_{{.ID}}">{{.Name}}</label>
+          <input type="text" class="mono" id="controls_{{.ID}}" name="controls_{{.ID}}"
+                 value="{{join ", " (index $r.ControlRefs .ID)}}" placeholder="e.g. AC-2, SI-2">
+        </div>
+        {{end}}{{end}}
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h2>Scoring and ownership</h2></header>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field"><label for="likelihood">Likelihood (1-5)</label>
+            <input type="number" min="1" max="5" id="likelihood" name="likelihood" value="{{$r.Likelihood}}"></div>
+          <div class="field"><label for="impact">Impact (1-5)</label>
+            <input type="number" min="1" max="5" id="impact" name="impact" value="{{$r.Impact}}"></div>
+          <div class="field"><label for="status">Status</label>
+            <select id="status" name="status">
+              {{range riskStatuses}}<option value="{{.}}" {{if eq . $r.Status}}selected{{end}}>{{humanise .}}</option>{{end}}
+            </select></div>
+          <div class="field"><label for="source">Source</label>
+            <select id="source" name="source">
+              {{range riskSources}}<option value="{{.}}" {{if eq . $r.Source}}selected{{end}}>{{humanise .}}</option>{{end}}
+            </select></div>
+          <div class="field"><label for="owner">Owner</label>
+            <input type="text" id="owner" name="owner" value="{{$r.Owner}}"></div>
+          <div class="field"><label for="detected">Detected</label>
+            <input type="date" id="detected" name="detected" value="{{$r.Detected.Format "2006-01-02"}}"></div>
+          <div class="field"><label for="due">Due</label>
+            <input type="date" id="due" name="due" value="{{dateInput $r.Due}}"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>Assets affected</h2></header>
+      <div class="card-body">
+        <div class="field">
+          <label for="asset_ids">Select any number</label>
+          <select id="asset_ids" name="asset_ids" multiple size="10">
+            {{$sel := $r.AssetIDs}}
+            {{range $d.Assets}}{{$id := .ID}}
+            <option value="{{$id}}" {{range $sel}}{{if eq . $id}}selected{{end}}{{end}}>{{.DisplayName}}</option>
+            {{end}}
+          </select>
+        </div>
+        <div class="field">
+          <label for="finding_ids">Finding identifiers
+            <span class="hint">Comma separated. Filled in automatically when an entry is raised from a finding.</span></label>
+          <input type="text" class="mono" id="finding_ids" name="finding_ids" value="{{join ", " $r.FindingIDs}}">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="form-actions">
+  <button class="btn primary" type="submit">Save entry</button>
+  <a class="btn" href="/enclaves/{{$e.ID}}/risk">Cancel</a>
+</div>
+</form>
+
+{{if not $d.IsNew}}
+<form method="post" action="/risk/{{$r.ID}}/delete" style="margin-top: 1.5rem"
+      data-confirm="Delete this risk entry?">
+  <button class="btn danger" type="submit">Delete this entry</button>
+</form>
+{{end}}
+{{template "foot" .}}

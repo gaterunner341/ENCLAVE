@@ -1,0 +1,88 @@
+{{template "head" .}}
+{{$d := .Data}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Control baselines</h1>
+    <p class="lede">The frameworks enclaves are measured against. Three ship with ENCLAVE; load as
+      many more as you need. An import that reuses a built-in identifier replaces it, which is how
+      the abridged copies here are upgraded to authoritative ones.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Catalogue</th><th>Publisher</th><th class="num">Controls</th>
+        <th>Profiles</th><th>Used by</th><th></th></tr></thead>
+      <tbody>
+      {{range $d.Rows}}{{$c := .Catalog}}
+      <tr>
+        <td><a href="/catalogs/{{$c.ID}}"><strong>{{$c.Name}}</strong></a>
+          <div class="mono" style="color: var(--text-3); font-size: .75rem">{{$c.ID}}{{if $c.Version}} · {{$c.Version}}{{end}}</div>
+          {{if $c.Description}}<div style="color: var(--text-3); font-size: .78rem; max-width: 52ch">{{truncate 140 $c.Description}}</div>{{end}}</td>
+        <td>{{if $c.Publisher}}{{$c.Publisher}}{{else}}—{{end}}
+          <div>{{if $c.BuiltIn}}<span class="badge plain">built in</span>{{else}}<span class="badge gap-planned">imported</span>{{end}}</div></td>
+        <td class="num">{{comma (len $c.Controls)}}</td>
+        <td style="font-size: .8rem">{{range $c.Profiles}}<div>{{.Name}} <span style="color: var(--text-3)">{{$c.Count .ID}}</span></div>{{else}}—{{end}}</td>
+        <td style="font-size: .8rem">{{range .UsedBy}}<div><a href="/enclaves/{{.ID}}">{{.Name}}</a></div>{{else}}<span style="color: var(--text-3)">no enclave</span>{{end}}</td>
+        <td>{{if and (not $c.BuiltIn) (not $.ReadOnly)}}
+          <form method="post" action="/catalogs/{{$c.ID}}/delete" data-confirm="Remove {{$c.Name}}?">
+            <button class="btn small danger" type="submit">Remove</button></form>{{end}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{{if not .ReadOnly}}
+<div class="split">
+  <div class="card">
+    <header><h2>Load a catalogue</h2></header>
+    <div class="card-body">
+      <form method="post" action="/catalogs/import" enctype="multipart/form-data">
+        <div class="field">
+          <label for="file">File
+            <span class="hint">OSCAL JSON, a CSV export, or the plain text format described alongside.</span></label>
+          <input type="file" id="file" name="file" required accept=".json,.csv,.catalog,.txt">
+        </div>
+        <div class="form-grid">
+          <div class="field"><label for="id">Identifier
+            <span class="hint">Reuse a built-in identifier to replace it.</span></label>
+            <input type="text" id="id" name="id" placeholder="taken from the file"></div>
+          <div class="field"><label for="name">Name</label>
+            <input type="text" id="name" name="name" placeholder="taken from the file"></div>
+        </div>
+        <button class="btn primary" type="submit">Load</button>
+      </form>
+      {{if $d.Dir}}<p style="margin: .75rem 0 0; color: var(--text-3); font-size: .8rem">
+        Loaded catalogues are kept in <span class="mono">{{$d.Dir}}</span>. Files dropped there
+        are picked up at startup.</p>{{end}}
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>The plain text format</h2></header>
+    <div class="card-body">
+      <p style="color: var(--text-2); font-size: .85rem">An organisation's own framework is a text
+        file, so it reviews as a readable diff rather than a wall of braces.</p>
+      <pre class="prose box mono" style="white-space: pre">@id       acme-secure-build
+@name     ACME Secure Build Standard
+@version  2026.1
+@profile  core = Core requirements
+@profile  ext  = Extended requirements
+@family   HD   = Hardening
+
+HD-1    | Approved base image only   | core,ext
+HD-1(1) | Image rebuilt monthly      | ext
+HD-2    | Local administrator vaulted | core,ext</pre>
+      <p style="margin: .75rem 0 0; color: var(--text-2); font-size: .85rem">
+        A CSV works too: give it <span class="mono">id</span> and <span class="mono">title</span>
+        columns, and optionally <span class="mono">family</span>,
+        <span class="mono">profiles</span>, <span class="mono">statement</span> and
+        <span class="mono">discussion</span>.</p>
+    </div>
+  </div>
+</div>
+{{end}}
+{{template "foot" .}}

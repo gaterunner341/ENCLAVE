@@ -1,0 +1,109 @@
+{{template "head" .}}
+{{$d := .Data}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Import scan results</h1>
+    <p class="lede">ENCLAVE reads the files your tools already produce. Structured formats are
+      applied straight away; a spreadsheet stops at a mapping screen so you can see what was
+      guessed before anything is written.</p>
+  </div>
+</div>
+
+{{if not $d.Enclaves}}
+<div class="card"><div class="empty">
+  <h3>Create an enclave first</h3>
+  <p>Results have to land somewhere. An enclave with address ranges also lets the importer place
+     assets automatically.</p>
+  <a class="btn primary" href="/enclaves/new">New enclave</a>
+</div></div>
+{{else}}
+
+<div class="split">
+  <div class="card">
+    <header><h2>Upload</h2></header>
+    <div class="card-body">
+      <form method="post" action="/import" enctype="multipart/form-data">
+        <div class="field">
+          <label for="file">Result file
+            <span class="hint">.ckl, .cklb, .xml, .nessus, .csv</span></label>
+          <input type="file" id="file" name="file" required
+                 accept=".ckl,.cklb,.xml,.nessus,.csv,.tsv,.txt,text/csv,text/xml,application/xml,application/json">
+        </div>
+        <div class="field">
+          <label for="enclave_id">Enclave</label>
+          <select id="enclave_id" name="enclave_id" required>
+            {{range $d.Enclaves}}<option value="{{.ID}}" {{if eq .ID $d.Selected}}selected{{end}}>{{.Name}}</option>{{end}}
+          </select>
+        </div>
+        <div class="field">
+          <label for="title">Title
+            <span class="hint">Left blank, the file's own title is used.</span></label>
+          <input type="text" id="title" name="title">
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="imported_by">Imported by</label>
+            <input type="text" id="imported_by" name="imported_by">
+          </div>
+          <div class="field">
+            <label for="default_criticality">Criticality for new assets</label>
+            <select id="default_criticality" name="default_criticality">
+              {{range criticalities}}<option value="{{.}}" {{if eq (printf "%s" .) "moderate"}}selected{{end}}>{{.Label}}</option>{{end}}
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="notes">Notes</label>
+          <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="check">
+          <input type="checkbox" id="create_assets" name="create_assets" checked value="on">
+          <label for="create_assets">Create assets that are not already in the inventory
+            <span class="hint">Turn this off to keep an import strictly additive to a curated inventory.</span></label>
+        </div>
+        <div class="check">
+          <input type="checkbox" id="place_by_address" name="place_by_address" value="on">
+          <label for="place_by_address">Place assets by address range
+            <span class="hint">Route each target to the enclave whose network range matches it most
+              specifically, falling back to the one chosen above.</span></label>
+        </div>
+        <button class="btn primary" type="submit">Read the file</button>
+      </form>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>What is understood</h3></header>
+      <div class="table-wrap"><table>
+        <tbody>
+        <tr><td><strong>STIG checklist</strong><div style="color: var(--text-3); font-size: .78rem">.ckl and .cklb</div></td>
+          <td>Rule, group, severity, status, CCI references, check and fix text, and the reviewer's
+              own comments.</td></tr>
+        <tr><td><strong>SCAP results</strong><div style="color: var(--text-3); font-size: .78rem">XCCDF and ARF</div></td>
+          <td>Rule results joined to their definitions, with CCI and CVE identifiers taken from
+              either the rule or the result.</td></tr>
+        <tr><td><strong>Nessus and ACAS</strong><div style="color: var(--text-3); font-size: .78rem">.nessus</div></td>
+          <td>Plugins with CVEs and CVSS, plus compliance audit results, which are read as
+              configuration checks rather than vulnerabilities.</td></tr>
+        <tr><td><strong>Spreadsheets</strong><div style="color: var(--text-3); font-size: .78rem">.csv</div></td>
+          <td>Anything with a header row. Column headings from the common exporters are recognised
+              automatically and shown for confirmation.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <header><h3>Re-importing is safe</h3></header>
+      <div class="card-body" style="color: var(--text-2); font-size: .85rem">
+        <p>A finding is identified by its rule and the asset it is about. Loading next month's scan
+           updates the existing rows: the first-seen date stays, so age stays meaningful, and any
+           decision you recorded is left alone.</p>
+        <p style="margin: 0">A finding the scanner stops reporting closes itself, unless somebody
+           has recorded a different decision about it.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}
+{{template "foot" .}}

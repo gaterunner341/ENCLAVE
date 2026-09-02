@@ -1,0 +1,135 @@
+{{template "head" .}}
+{{$d := .Data}}{{$f := $d.Finding}}{{$e := .Enclave}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs">{{if $e}}<a href="/enclaves/{{$e.ID}}/findings">Findings</a>{{end}}</div>
+    <h1>{{$f.Title}}</h1>
+    <div class="pill-row" style="margin-top: .4rem">
+      <span class="badge {{severityClass $f.Severity}}">{{$f.Severity.Label}}</span>
+      <span class="badge plain">{{$f.Status.Label}}</span>
+      <span class="badge {{dispositionClass $f.Disposition}}">{{$f.Disposition.Label}}</span>
+      {{if $d.Overdue}}<span class="badge sev-high">Past remediation target</span>{{end}}
+      {{if $f.RuleID}}<span class="badge plain mono">{{$f.RuleID}}</span>{{end}}
+    </div>
+  </div>
+  {{if not .ReadOnly}}{{if $e}}
+  <div><a class="btn" href="/enclaves/{{$e.ID}}/risk/new?finding={{$f.ID}}">Raise a risk entry</a></div>
+  {{end}}{{end}}
+</div>
+
+<div class="split">
+  <div>
+    {{if $f.Description}}
+    <div class="card"><header><h3>Discussion</h3></header>
+      <div class="card-body"><div class="prose">{{$f.Description}}</div></div></div>
+    {{end}}
+    {{if $f.CheckText}}
+    <div class="card"><header><h3>Check</h3></header>
+      <div class="card-body"><div class="prose box">{{$f.CheckText}}</div></div></div>
+    {{end}}
+    {{if $f.FixText}}
+    <div class="card"><header><h3>Fix</h3></header>
+      <div class="card-body"><div class="prose box">{{$f.FixText}}</div></div></div>
+    {{end}}
+    {{if $f.FindingDetails}}
+    <div class="card"><header><h3>What the scanner observed</h3></header>
+      <div class="card-body"><div class="prose box">{{$f.FindingDetails}}</div></div></div>
+    {{end}}
+    {{if $f.Comments}}
+    <div class="card"><header><h3>Comments carried in the scan</h3></header>
+      <div class="card-body"><div class="prose box">{{$f.Comments}}</div></div></div>
+    {{end}}
+
+    {{if $d.Siblings}}
+    <div class="card">
+      <header><h3>The same rule elsewhere in this enclave</h3><span class="spacer"></span>
+        <span class="badge plain">{{$d.SiblingTotal}} other assets</span></header>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Asset</th><th>Status</th><th>Decision</th><th class="num">Age</th></tr></thead>
+        <tbody>{{range $d.Siblings}}
+        <tr><td>{{template "assetlink" dict "Index" $d.AssetIndex "ID" .AssetID}}</td>
+          <td><a href="/findings/{{.ID}}">{{.Status.Label}}</a></td>
+          <td>{{.Disposition.Label}}</td>
+          <td class="num">{{days .FirstSeen}}d</td></tr>
+        {{end}}</tbody>
+      </table></div>
+      <div class="table-note">A rule failing on one host is a misconfiguration; the same rule
+        failing on many is a control that is not being applied.</div>
+    </div>
+    {{end}}
+  </div>
+
+  <div>
+    {{if not .ReadOnly}}
+    <div class="card">
+      <header><h3>Record a decision</h3></header>
+      <div class="card-body">
+        <form method="post" action="/findings/{{$f.ID}}/disposition">
+          <div class="field"><label for="disposition">Disposition</label>
+            <select id="disposition" name="disposition">
+              {{range dispositions}}<option value="{{.}}" {{if eq . $f.Disposition}}selected{{end}}>{{.Label}}</option>{{end}}
+            </select></div>
+          <div class="field"><label for="by">Recorded by
+            <span class="hint">Required to accept, mitigate or dismiss.</span></label>
+            <input type="text" id="by" name="by" value="{{$f.DispositionBy}}"></div>
+          <div class="field"><label for="note">Reason</label>
+            <textarea id="note" name="note">{{$f.DispositionNote}}</textarea></div>
+          <div class="field"><label for="due">Target date
+            <span class="hint">Defaults to {{remediationTarget $f.Severity}} days from first seen.</span></label>
+            <input type="date" id="due" name="due" value="{{dateInput $f.DueDate}}"></div>
+          <button class="btn primary" type="submit">Save decision</button>
+        </form>
+        {{if $f.DispositionAt}}
+        <p style="margin: .75rem 0 0; color: var(--text-3); font-size: .8rem">
+          Last recorded {{dateP $f.DispositionAt}}{{if $f.DispositionBy}} by {{$f.DispositionBy}}{{end}}.</p>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+
+    <div class="card">
+      <header><h3>Controls this is evidence about</h3></header>
+      {{if $d.Refs}}
+      <div class="table-wrap"><table>
+        <tbody>{{range $d.Refs}}
+        <tr><td style="font-size: .78rem; color: var(--text-3)">{{.Catalog}}</td>
+          <td><a class="mono" href="/enclaves/{{$e.ID}}/baseline/{{.CatalogID}}/{{.Control}}">{{.Control}}</a>
+            <div style="font-size: .78rem">{{.Title}}</div></td></tr>
+        {{end}}</tbody>
+      </table></div>
+      {{else}}
+      <div class="card-body">
+        <p style="color: var(--text-2)">This finding reached no control. Either the scan carries no
+          identifiers that a mapping table recognises, or no table covers them.</p>
+        <a class="btn small" href="/mappings">Review mappings</a>
+      </div>
+      {{end}}
+    </div>
+
+    <div class="card">
+      <header><h3>Record</h3></header>
+      <div class="card-body">
+        <div class="facts">
+          <div><div class="k">Asset</div><div class="v">{{if $d.Asset}}<a href="/assets/{{$d.Asset.ID}}">{{$d.Asset.DisplayName}}</a>{{else}}—{{end}}</div></div>
+          <div><div class="k">Rule</div><div class="v mono">{{if $f.RuleID}}{{$f.RuleID}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Group</div><div class="v mono">{{if $f.GroupID}}{{$f.GroupID}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Raw severity</div><div class="v">{{if $f.RawSeverity}}{{$f.RawSeverity}}{{else}}—{{end}}</div></div>
+          <div><div class="k">First seen</div><div class="v">{{date $f.FirstSeen}} ({{days $f.FirstSeen}} days)</div></div>
+          <div><div class="k">Last seen</div><div class="v">{{date $f.LastSeen}}</div></div>
+          <div><div class="k">Target date</div><div class="v">{{dateP $d.Due}}</div></div>
+          {{if $f.CVSS}}<div><div class="k">CVSS</div><div class="v">{{num $f.CVSS}}
+            {{if $f.CVSSVector}}<div class="mono" style="font-size: .72rem; color: var(--text-3)">{{$f.CVSSVector}}</div>{{end}}</div></div>{{end}}
+          {{if $f.Port}}<div><div class="k">Service</div><div class="v mono">{{$f.Protocol}}/{{$f.Port}} {{$f.Service}}</div></div>{{end}}
+          <div><div class="k">Import</div><div class="v">{{if $d.Scan}}<a href="/scans/{{$d.Scan.ID}}">{{truncate 36 $d.Scan.Title}}</a>{{else}}—{{end}}</div></div>
+        </div>
+        {{if $f.CVEs}}<div style="margin-top: 1rem"><div class="k" style="font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); font-weight: 600">CVEs</div>
+          <div class="pill-row" style="margin-top: .3rem">{{range $f.CVEs}}<span class="tag mono">{{.}}</span>{{end}}</div></div>{{end}}
+        {{if $f.CCIs}}<div style="margin-top: 1rem"><div class="k" style="font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); font-weight: 600">CCIs</div>
+          <div class="pill-row" style="margin-top: .3rem">{{range $f.CCIs}}<span class="tag mono">{{.}}</span>{{end}}</div></div>{{end}}
+        {{if $f.References}}<div style="margin-top: 1rem"><div class="k" style="font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); font-weight: 600">References</div>
+          <div class="pill-row" style="margin-top: .3rem">{{range $f.References}}<span class="tag">{{.}}</span>{{end}}</div></div>{{end}}
+      </div>
+    </div>
+  </div>
+</div>
+{{template "foot" .}}

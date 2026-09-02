@@ -1,0 +1,94 @@
+{{template "head" .}}
+{{$d := .Data}}{{$a := $d.Asset}}{{$e := .Enclave}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs">{{if $e}}<a href="/enclaves/{{$e.ID}}/assets">Assets</a>{{end}}</div>
+    <h1>{{if $d.IsNew}}Add asset{{else}}Edit {{$a.DisplayName}}{{end}}</h1>
+  </div>
+</div>
+
+<form method="post" action="{{if $d.IsNew}}/enclaves/{{$e.ID}}/assets/new{{else}}/assets/{{$a.ID}}/edit{{end}}">
+<div class="split">
+  <div class="card">
+    <header><h2>Identity</h2></header>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="field"><label for="name">Name</label>
+          <input type="text" id="name" name="name" value="{{$a.Name}}" autofocus></div>
+        <div class="field"><label for="fqdn">Fully qualified name</label>
+          <input type="text" id="fqdn" name="fqdn" value="{{$a.FQDN}}"></div>
+        <div class="field"><label for="type">Type
+          <span class="hint">Decides which controls can apply.</span></label>
+          <select id="type" name="type">
+            {{range assetTypes}}<option value="{{.}}" {{if eq . $a.Type}}selected{{end}}>{{.Label}}</option>{{end}}
+          </select></div>
+        <div class="field"><label for="criticality">Criticality
+          <span class="hint">Weights this asset's findings.</span></label>
+          <select id="criticality" name="criticality">
+            {{range criticalities}}<option value="{{.}}" {{if eq . $a.Criticality}}selected{{end}}>{{.Label}}</option>{{end}}
+          </select></div>
+        <div class="field"><label for="role">Role</label>
+          <input type="text" id="role" name="role" value="{{$a.Role}}" placeholder="Domain controller, core switch"></div>
+        <div class="field"><label for="enclave_id">Enclave</label>
+          <select id="enclave_id" name="enclave_id">
+            {{range $d.Enclaves}}<option value="{{.ID}}" {{if eq .ID $a.EnclaveID}}selected{{end}}>{{.Name}}</option>{{end}}
+          </select></div>
+      </div>
+      <div class="form-grid">
+        <div class="field"><label for="ips">IP addresses
+          <span class="hint">Comma or space separated.</span></label>
+          <input type="text" id="ips" name="ips" class="mono" value="{{join ", " $a.IPs}}"></div>
+        <div class="field"><label for="macs">MAC addresses</label>
+          <input type="text" id="macs" name="macs" class="mono" value="{{join ", " $a.MACs}}"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>Platform and ownership</h2></header>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="field"><label for="os">Operating system</label>
+          <input type="text" id="os" name="os" value="{{$a.OS}}"></div>
+        <div class="field"><label for="os_version">Version</label>
+          <input type="text" id="os_version" name="os_version" value="{{$a.OSVersion}}"></div>
+        <div class="field"><label for="vendor">Vendor</label>
+          <input type="text" id="vendor" name="vendor" value="{{$a.Vendor}}"></div>
+        <div class="field"><label for="model">Model</label>
+          <input type="text" id="model" name="model" value="{{$a.Model}}"></div>
+        <div class="field"><label for="firmware">Firmware</label>
+          <input type="text" id="firmware" name="firmware" value="{{$a.Firmware}}"></div>
+        <div class="field"><label for="serial">Serial number</label>
+          <input type="text" id="serial" name="serial" class="mono" value="{{$a.Serial}}"></div>
+        <div class="field"><label for="owner">Owner</label>
+          <input type="text" id="owner" name="owner" value="{{$a.Owner}}"></div>
+        <div class="field"><label for="location">Location</label>
+          <input type="text" id="location" name="location" value="{{$a.Location}}"></div>
+        <div class="field"><label for="status">Status</label>
+          <select id="status" name="status">
+            <option value=""></option>
+            {{range assetStates}}<option value="{{.}}" {{if eq . $a.Status}}selected{{end}}>{{.}}</option>{{end}}
+          </select></div>
+        <div class="field"><label for="tags">Tags</label>
+          <input type="text" id="tags" name="tags" value="{{join ", " $a.Tags}}"></div>
+      </div>
+      <div class="field"><label for="notes">Notes</label>
+        <textarea id="notes" name="notes">{{$a.Notes}}</textarea></div>
+    </div>
+  </div>
+</div>
+
+<div class="form-actions">
+  <button class="btn primary" type="submit">Save</button>
+  {{if not $d.IsNew}}<a class="btn" href="/assets/{{$a.ID}}">Cancel</a>{{end}}
+</div>
+</form>
+
+{{if not $d.IsNew}}
+<form method="post" action="/assets/{{$a.ID}}/delete" style="margin-top: 1.5rem"
+      data-confirm="Remove {{$a.DisplayName}} and every finding recorded against it?">
+  <button class="btn danger" type="submit">Delete this asset</button>
+  <span style="color: var(--text-3); margin-left: .5rem">Its findings go with it.</span>
+</form>
+{{end}}
+{{template "foot" .}}

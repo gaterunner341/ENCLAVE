@@ -1,55 +1,183 @@
 package model
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
-func TestIdentifierNormalize(t *testing.T) {
-	cases := []struct {
-		in   Identifier
-		want string
-	}{
-		{Identifier{IDMAC, "AA:BB:CC:11:22:33"}, "aabbcc112233"},
-		{Identifier{IDMAC, "aa-bb-cc-11-22-33"}, "aabbcc112233"},
-		{Identifier{IDHostname, "WKS-014.corp.example.com"}, "wks-014"},
-		{Identifier{IDFQDN, "WKS-014.corp.example.com."}, "wks-014.corp.example.com"},
-		{Identifier{IDSerial, "  5cg-8241-lm "}, "5CG8241LM"},
+func TestSeverityNormalisationAcrossScanners(t *testing.T) {
+	cases := map[string]Severity{
+		"CAT I": SeverityHigh, "cat ii": SeverityMedium, "CAT III": SeverityLow,
+		"high": SeverityHigh, "Medium": SeverityMedium, "  LOW  ": SeverityLow,
+		"Critical": SeverityCritical, "4": SeverityCritical, "3": SeverityHigh,
+		"2": SeverityMedium, "1": SeverityLow, "0": SeverityInfo, "": SeverityInfo,
+		"None": SeverityInfo, "moderate": SeverityMedium,
 	}
-	for _, c := range cases {
-		if got := c.in.Normalize().Value; got != c.want {
-			t.Errorf("Normalize(%q) = %q, want %q", c.in.Value, got, c.want)
+	for in, want := range cases {
+		if got := SeverityFromCategory(in); got != want {
+			t.Errorf("SeverityFromCategory(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
 
-func TestIdentifierValid(t *testing.T) {
-	valid := []Identifier{
-		{IDHostname, "wks-014"},
-		{IDMAC, "aabbcc112233"},
-		{IDSerial, "5CG8241LM"},
+func TestSeverityFromCVSSFollowsFIRSTBands(t *testing.T) {
+	cases := map[float64]Severity{
+		10: SeverityCritical, 9.0: SeverityCritical, 8.9: SeverityHigh,
+		7.0: SeverityHigh, 6.9: SeverityMedium, 4.0: SeverityMedium,
+		3.9: SeverityLow, 0.1: SeverityLow, 0: SeverityInfo,
 	}
-	for _, id := range valid {
-		if !id.Valid() {
-			t.Errorf("%v should be valid", id)
-		}
-	}
-	invalid := []Identifier{
-		{IDHostname, ""},
-		{IDSerial, "To Be Filled By O.E.M."},
-		{IDMAC, "aabbcc"}, // half an address is not an address
-		{IDUUID, "unknown"},
-	}
-	for _, id := range invalid {
-		if id.Valid() {
-			t.Errorf("%v should not be valid", id)
+	for score, want := range cases {
+		if got := SeverityFromCVSS(score); got != want {
+			t.Errorf("SeverityFromCVSS(%v) = %q, want %q", score, got, want)
 		}
 	}
 }
 
-func TestDisplayNameFallsBackToHardware(t *testing.T) {
-	h := &Host{Identifiers: []Identifier{{IDMAC, "aabbcc112233"}}}
-	if h.Named() {
-		t.Fatal("a host with only a MAC address is not named")
+func TestFindingStatusNormalisation(t *testing.T) {
+	cases := map[string]FindingStatus{
+		"Open": StatusOpen, "fail": StatusOpen, "Failed": StatusOpen,
+		"NotAFinding": StatusNotAFinding, "pass": StatusNotAFinding,
+		"Not_Applicable": StatusNotApplicable, "notapplicable": StatusNotApplicable,
+		"Not_Reviewed": StatusNotReviewed, "": StatusNotReviewed, "unknown": StatusNotReviewed,
 	}
-	if got, want := h.DisplayName(), "MAC-AABBCC112233"; got != want {
-		t.Errorf("DisplayName() = %q, want %q", got, want)
+	for in, want := range cases {
+		if got := FindingStatus(in).Normalise(); got != want {
+			t.Errorf("FindingStatus(%q) = %q, want %q", in, got, want)
+		}
 	}
+	if StatusNotAFinding.Counts() {
+		t.Error("a passing check must not count as open")
+	}
+}
+
+func TestCategorizationIsHighWaterMark(t *testing.T) {
+	e := &Enclave{Confidentiality: ImpactLow, Integrity: ImpactModerate, Availability: ImpactHigh}
+	if got := e.Categorization(); got != ImpactHigh {
+		t.Errorf("got %q, want high", got)
+	}
+	e.Availability = ImpactLow
+	if got := e.Categorization(); got != ImpactModerate {
+		t.Errorf("got %q, want moderate", got)
+	}
+}
+
+func TestFindingLiveness(t *testing.T) {
+	f := &Finding{Status: StatusOpen, Disposition: DispositionOpen}
+	if !f.Live() {
+		t.Error("an open finding with no decision is live")
+	}
+	f.Disposition = DispositionRemediated
+	if f.Live() {
+		t.Error("a remediated finding is not live")
+	}
+	f.Disposition = DispositionRiskAccepted
+	if !f.Live() {
+		t.Error("an accepted risk is still live: it is tracked, not gone")
+	}
+	f.Status = StatusNotAFinding
+	f.Disposition = DispositionOpen
+	if f.Live() {
+		t.Error("a finding the scanner passes is not live")
+	}
+}
+
+func TestDispositionResidualOrdering(t *testing.T) {
+	if DispositionRemediated.Residual() != 0 {
+		t.Error("a remediated finding carries no residual risk")
+	}
+	if DispositionRiskAccepted.Residual() >= DispositionMitigated.Residual() {
+		t.Error("an accepted risk should score below a mitigated one, since it is a deliberate decision")
+	}
+	if DispositionInProgress.Residual() >= DispositionOpen.Residual() {
+		t.Error("work in progress should score below untouched")
+	}
+}
+
+func TestEnclaveValidationReportsEveryProblem(t *testing.T) {
+	e := &Enclave{ID: "!", Networks: []Network{{CIDR: "not-a-range"}, {CIDR: "10.0.0.0/8"}, {CIDR: "10.0.0.0/8"}}}
+	err := e.Validate()
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	for _, want := range []string{"name is required", "identifier must be", "not-a-range", "twice"} {
+		if !contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+func TestAssetNeedsANameOrAnAddress(t *testing.T) {
+	a := &Asset{EnclaveID: "x"}
+	if a.Validate() == nil {
+		t.Error("an asset with neither a name nor an address should be rejected")
+	}
+	a.IPs = []string{"10.1.2.3"}
+	if err := a.Validate(); err != nil {
+		t.Errorf("an asset with an address is valid: %v", err)
+	}
+	a.IPs = []string{"not an address"}
+	if a.Validate() == nil {
+		t.Error("a malformed address should be rejected")
+	}
+}
+
+func TestRiskScoreAndBand(t *testing.T) {
+	r := &RiskEntry{Likelihood: 5, Impact: 5}
+	if r.Score() != 25 || r.Band() != "Very high" {
+		t.Errorf("got %d %q", r.Score(), r.Band())
+	}
+	r = &RiskEntry{Likelihood: 0, Impact: 9} // out of range on both sides
+	if r.Score() != 5 {
+		t.Errorf("out-of-range values should clamp to 1 and 5, got %d", r.Score())
+	}
+}
+
+func TestRiskOverdue(t *testing.T) {
+	past := time.Now().Add(-24 * time.Hour)
+	r := &RiskEntry{Status: "open", Due: &past}
+	if !r.Overdue(time.Now()) {
+		t.Error("an open entry past its due date is overdue")
+	}
+	r.Status = "completed"
+	if r.Overdue(time.Now()) {
+		t.Error("a completed entry is not overdue")
+	}
+}
+
+func TestSlugIDKeepsCase(t *testing.T) {
+	for in, want := range map[string]string{
+		"CORE-OPS": "CORE-OPS", "Core Operations": "Core-Operations",
+		"  a//b  ": "a-b", "!!!": "",
+	} {
+		if got := SlugID(in); got != want {
+			t.Errorf("SlugID(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestDedupPreservesOrder(t *testing.T) {
+	got := Dedup([]string{"b", "a", "", "b", " a ", "c"})
+	want := []string{"b", "a", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}
+
+func contains(hay, needle string) bool {
+	return len(hay) >= len(needle) && (hay == needle ||
+		len(needle) == 0 || indexOf(hay, needle) >= 0)
+}
+
+func indexOf(hay, needle string) int {
+	for i := 0; i+len(needle) <= len(hay); i++ {
+		if hay[i:i+len(needle)] == needle {
+			return i
+		}
+	}
+	return -1
 }

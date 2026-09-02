@@ -1,0 +1,77 @@
+{{template "head" .}}
+{{$d := .Data}}{{$e := .Enclave}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Assets</h1>
+    <p class="lede">Hosts and network devices in {{$e.Name}}. The type is what stops a switch
+      being measured against a control only a workstation could meet.</p>
+  </div>
+  <div>
+    <a class="btn" href="/export/assets?enclave={{$e.ID}}">Export</a>
+    {{if not .ReadOnly}}<a class="btn primary" href="/enclaves/{{$e.ID}}/assets/new">Add asset</a>{{end}}
+  </div>
+</div>
+
+<div class="card">
+  <form class="filters" method="get" data-autosubmit>
+    <div class="field grow">
+      <label for="q">Search</label>
+      <input type="search" id="q" name="q" value="{{$d.Query}}" placeholder="name, address, platform, owner, serial, tag">
+    </div>
+    <div class="field">
+      <label for="type">Type</label>
+      <select id="type" name="type">
+        <option value="">Any</option>
+        {{range assetTypes}}<option value="{{.}}" {{if eq (printf "%s" .) $d.Type}}selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </div>
+    <div class="field">
+      <label for="criticality">Criticality</label>
+      <select id="criticality" name="criticality">
+        <option value="">Any</option>
+        {{range criticalities}}<option value="{{.}}" {{if eq (printf "%s" .) $d.Criticality}}selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </div>
+    <button class="btn" type="submit">Apply</button>
+    <a class="btn" href="/enclaves/{{$e.ID}}/assets">Clear</a>
+  </form>
+
+  {{if $d.Rows}}
+  <div class="table-wrap">
+    <table data-sortable>
+      <thead><tr>
+        <th data-sort="text">Asset</th><th data-sort="text">Type</th><th data-sort="text">Platform</th>
+        <th data-sort="text">Addresses</th><th data-sort="text">Criticality</th>
+        <th class="num" data-sort="number">Open</th><th data-sort="text">Worst</th>
+        <th data-sort="text">Last seen</th><th class="num" data-sort="number">Score</th>
+      </tr></thead>
+      <tbody>
+      {{range $d.Rows}}{{$a := .Asset}}
+      <tr>
+        <td><a href="/assets/{{$a.ID}}"><strong>{{$a.DisplayName}}</strong></a>
+          {{if $a.Role}}<div style="color: var(--text-3); font-size: .78rem">{{$a.Role}}</div>{{end}}</td>
+        <td>{{$a.Type.Label}}</td>
+        <td style="font-size: .82rem">{{truncate 44 $a.Platform}}</td>
+        <td class="mono" style="font-size: .78rem">{{join " " $a.IPs}}</td>
+        <td>{{$a.Criticality.Label}}</td>
+        <td class="num">{{.Open}}</td>
+        <td>{{if .Open}}<span class="badge {{severityClass .Worst}}">{{.Worst.Label}}</span>{{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
+        <td style="white-space: nowrap">{{if .LastSeen}}{{dateP .LastSeen}}{{if .Stale}}<div><span class="badge sev-medium">stale</span></div>{{end}}{{else}}<span class="badge plain">never scanned</span>{{end}}</td>
+        <td class="num">{{num .Score}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-note">{{comma $d.Total}} assets shown.</div>
+  {{else}}
+  <div class="empty">
+    <h3>No assets match</h3>
+    <p>Assets are usually created by importing a scan, which fills in what the scanner knows and
+       leaves the rest for you.</p>
+    {{if not .ReadOnly}}<a class="btn" href="/import?enclave={{$e.ID}}">Import results</a>
+    <a class="btn" href="/enclaves/{{$e.ID}}/assets/new">Add one by hand</a>{{end}}
+  </div>
+  {{end}}
+</div>
+{{template "foot" .}}

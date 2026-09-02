@@ -1,0 +1,137 @@
+{{template "head" .}}
+{{$d := .Data}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Risk across every enclave</h1>
+    <p class="lede">One row per enclave, ordered by risk. The index combines open findings,
+      their severity, how long they have been open, how important the affected assets are, and
+      the enclave's own impact categorisation.</p>
+  </div>
+  <div>
+    <a class="btn" href="/reports">Reports</a>
+    {{if not .ReadOnly}}<a class="btn primary" href="/import">Import scan results</a>{{end}}
+  </div>
+</div>
+
+<div class="grid four" style="margin-bottom: 1.25rem">
+  <div class="stat"><div class="label">Enclaves</div><div class="value">{{comma $d.Counts.Enclaves}}</div></div>
+  <div class="stat"><div class="label">Assets tracked</div><div class="value">{{comma $d.Counts.Assets}}</div>
+    <div class="note">hosts and network devices</div></div>
+  <div class="stat"><div class="label">Open findings</div><div class="value">{{comma $d.Counts.OpenFindings}}</div>
+    <div class="note">of {{comma $d.Counts.Findings}} recorded</div></div>
+  <div class="stat"><div class="label">Open risk entries</div><div class="value">{{comma $d.Counts.OpenRisks}}</div>
+    <div class="note">{{comma $d.Counts.Scans}} imports on file</div></div>
+</div>
+
+{{if not $d.Rows}}
+<div class="card"><div class="empty">
+  <h3>No enclaves yet</h3>
+  <p>An enclave is a bounded system: whatever your organisation calls an authorisation boundary,
+     a site, or a mission network. Everything else hangs off one.</p>
+  {{if not .ReadOnly}}<a class="btn primary" href="/enclaves/new">Create the first enclave</a>{{end}}
+</div></div>
+{{else}}
+
+<div class="split">
+  <div class="card">
+    <header><h2>Enclaves</h2><span class="spacer"></span>
+      <a class="btn small" href="/export/findings">Export findings</a></header>
+    <div class="table-wrap">
+      <table data-sortable>
+        <thead><tr>
+          <th data-sort="text">Enclave</th>
+          <th data-sort="text">Categorisation</th>
+          <th class="num" data-sort="number">Assets</th>
+          <th class="num" data-sort="number">Open</th>
+          <th style="width: 150px">Severity mix</th>
+          <th class="num" data-sort="number">Overdue</th>
+          <th data-sort="text">Baseline</th>
+          <th class="num" data-sort="number">Coverage</th>
+          <th class="num" data-sort="number">Risk index</th>
+        </tr></thead>
+        <tbody>
+        {{range $d.Rows}}{{$e := .Risk.Enclave}}
+        <tr>
+          <td><a href="/enclaves/{{$e.ID}}"><strong>{{$e.Name}}</strong></a>
+            {{if $e.Environment}}<div style="color: var(--text-3); font-size: .78rem">{{$e.Environment}}</div>{{end}}</td>
+          <td><span class="badge plain">{{$e.Categorization.Label}}</span></td>
+          <td class="num">{{comma .Risk.Assets}}</td>
+          <td class="num">{{comma .Risk.Open}}</td>
+          <td>{{template "sevbar" dict "Counts" .Risk.BySev "Total" .Risk.Open}}</td>
+          <td class="num">{{if .Risk.Overdue}}<span class="badge sev-high">{{.Risk.Overdue}}</span>{{else}}0{{end}}</td>
+          <td style="font-size: .8rem">{{if .Baseline}}{{.Baseline}}{{else}}<span style="color: var(--text-3)">none assigned</span>{{end}}</td>
+          <td class="num">{{if .Baseline}}{{pct .Coverage}}<div style="color: var(--text-3); font-size: .74rem">{{pct .Verified}} verified</div>{{else}}—{{end}}</td>
+          <td class="num"><strong class="{{bandClass .Risk.Band}}">{{num .Risk.Index}}</strong>
+            <div style="font-size: .74rem" class="{{bandClass .Risk.Band}}">{{.Risk.Band}}</div></td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>Open findings by severity</h3></header>
+      <div class="card-body">{{template "donut" dict "D" $d.Severity "T" "Open findings by severity"}}</div>
+    </div>
+    <div class="card">
+      <header><h3>How long findings have been open</h3></header>
+      <div class="card-body">
+        <div class="bars">
+          {{$max := 0}}{{range $d.Ages}}{{if gt .Count $max}}{{$max = .Count}}{{end}}{{end}}
+          {{range $d.Ages}}
+          <div class="bar">
+            <span>{{.Label}}</span>
+            <span class="track"><span class="fill" style="width: {{printf "%.1f%%" (ratio .Count $max)}}"></span></span>
+            <span class="n">{{comma .Count}}</span>
+          </div>
+          {{end}}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid two">
+  <div class="card">
+    <header><h3>Highest severity open findings</h3></header>
+    {{if $d.Worst}}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Severity</th><th>Finding</th><th>Asset</th><th class="num">Age</th></tr></thead>
+      <tbody>
+      {{range $d.Worst}}
+      <tr>
+        <td><span class="badge {{severityClass .Severity}}">{{.Severity.Label}}</span></td>
+        <td class="wrap"><a href="/findings/{{.ID}}">{{truncate 90 .Title}}</a></td>
+        <td>{{template "assetlink" dict "Index" $d.AssetIndex "ID" .AssetID}}</td>
+        <td class="num">{{days .FirstSeen}}d</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table></div>
+    {{else}}<div class="empty"><p>No high or critical findings are open.</p></div>{{end}}
+  </div>
+
+  <div class="card">
+    <header><h3>Past the remediation target</h3></header>
+    {{if $d.Overdue}}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Severity</th><th>Finding</th><th>Asset</th><th class="num">Days open</th><th class="num">Target</th></tr></thead>
+      <tbody>
+      {{range $d.Overdue}}
+      <tr>
+        <td><span class="badge {{severityClass .Severity}}">{{.Severity.Label}}</span></td>
+        <td class="wrap"><a href="/findings/{{.ID}}">{{truncate 80 .Title}}</a></td>
+        <td>{{template "assetlink" dict "Index" $d.AssetIndex "ID" .AssetID}}</td>
+        <td class="num">{{days .FirstSeen}}</td>
+        <td class="num" style="color: var(--text-3)">{{remediationTarget .Severity}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table></div>
+    {{else}}<div class="empty"><p>Nothing has passed its remediation target.</p></div>{{end}}
+  </div>
+</div>
+{{end}}
+{{template "foot" .}}

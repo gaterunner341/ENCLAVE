@@ -1,0 +1,113 @@
+{{template "head" .}}
+{{$d := .Data}}{{$a := $d.Asset}}{{$e := .Enclave}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs">{{if $e}}<a href="/enclaves/{{$e.ID}}/assets">Assets</a>{{end}}</div>
+    <h1>{{$a.DisplayName}}</h1>
+    <p class="lede">{{$a.Type.Label}}{{if $a.Role}} · {{$a.Role}}{{end}} · {{$a.Platform}}</p>
+  </div>
+  <div>
+    {{if not .ReadOnly}}<a class="btn" href="/assets/{{$a.ID}}/edit">Edit</a>{{end}}
+    {{if $e}}<a class="btn" href="/enclaves/{{$e.ID}}/findings?asset={{$a.ID}}">All findings</a>{{end}}
+  </div>
+</div>
+
+{{if $d.Stale}}
+<div class="notice warn">Nothing has reported on this asset for over 45 days. An inventory
+  nobody is scanning is itself a control gap.</div>
+{{end}}
+
+<div class="split">
+  <div>
+    <div class="card">
+      <header><h2>Open findings</h2><span class="spacer"></span>
+        <input type="search" data-filters="asset-findings" placeholder="filter" style="width: 180px">
+      </header>
+      {{if $d.Findings}}
+      <div class="table-wrap">
+        <table id="asset-findings" data-sortable>
+          <thead><tr><th data-sort="text">Severity</th><th data-sort="text">Finding</th>
+            <th data-sort="text">Rule</th><th data-sort="text">Status</th>
+            <th class="num" data-sort="number">Age</th></tr></thead>
+          <tbody>
+          {{range $d.Findings}}
+          <tr>
+            <td><span class="badge {{severityClass .Severity}}">{{.Severity.Label}}</span></td>
+            <td class="wrap"><a href="/findings/{{.ID}}">{{truncate 96 .Title}}</a>
+              {{if .CVEs}}<div class="mono" style="color: var(--text-3); font-size: .74rem">{{truncate 60 (join " " .CVEs)}}</div>{{end}}</td>
+            <td class="mono" style="font-size: .76rem">{{.GroupID}}</td>
+            <td>{{if .Live}}<span class="badge plain">{{.Disposition.Label}}</span>{{else}}<span class="badge disp-remediated">{{.Status.Label}}</span>{{end}}</td>
+            <td class="num">{{days .FirstSeen}}d</td>
+          </tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}<div class="empty"><p>No findings have been recorded against this asset.</p></div>{{end}}
+    </div>
+
+    {{if $d.Controls}}
+    <div class="card">
+      <header><h2>Controls this asset speaks to</h2></header>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Baseline</th><th>Control</th><th>Title</th><th class="num">Open findings</th></tr></thead>
+        <tbody>{{range $d.Controls}}
+        <tr><td style="font-size: .82rem">{{.Catalog}}</td>
+          <td class="mono">{{.Control}}</td><td class="wrap">{{.Title}}</td>
+          <td class="num">{{.Open}}</td></tr>
+        {{end}}</tbody>
+      </table></div>
+    </div>
+    {{end}}
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>Open findings by severity</h3></header>
+      <div class="card-body">{{template "donut" dict "D" $d.Severity "T" "Open findings"}}
+        <div style="margin-top: .75rem; color: var(--text-2); font-size: .82rem">
+          Weighted risk score {{num $d.Score}}, including this asset's criticality of
+          {{lower $a.Criticality.Label}}.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h3>Inventory record</h3></header>
+      <div class="card-body">
+        <div class="facts">
+          <div><div class="k">Hostname</div><div class="v">{{if $a.Name}}{{$a.Name}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Fully qualified name</div><div class="v">{{if $a.FQDN}}{{$a.FQDN}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Type</div><div class="v">{{$a.Type.Label}}</div></div>
+          <div><div class="k">Criticality</div><div class="v">{{$a.Criticality.Label}}</div></div>
+          <div><div class="k">Operating system</div><div class="v">{{if $a.OS}}{{$a.OS}} {{$a.OSVersion}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Vendor and model</div><div class="v">{{if $a.Vendor}}{{$a.Vendor}} {{$a.Model}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Firmware</div><div class="v">{{if $a.Firmware}}{{$a.Firmware}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Serial</div><div class="v mono">{{if $a.Serial}}{{$a.Serial}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Addresses</div><div class="v mono">{{if $a.IPs}}{{join ", " $a.IPs}}{{else}}—{{end}}</div></div>
+          <div><div class="k">MAC addresses</div><div class="v mono">{{if $a.MACs}}{{join ", " $a.MACs}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Owner</div><div class="v">{{if $a.Owner}}{{$a.Owner}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Location</div><div class="v">{{if $a.Location}}{{$a.Location}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Status</div><div class="v">{{if $a.Status}}{{$a.Status}}{{else}}—{{end}}</div></div>
+          <div><div class="k">First seen</div><div class="v">{{date $a.FirstSeen}}</div></div>
+          <div><div class="k">Last seen</div><div class="v">{{dateP $a.LastSeen}}</div></div>
+        </div>
+        {{if $a.Tags}}<div class="pill-row" style="margin-top: 1rem">{{range $a.Tags}}<span class="tag">{{.}}</span>{{end}}</div>{{end}}
+        {{if $a.Notes}}<div class="prose box" style="margin-top: 1rem">{{$a.Notes}}</div>{{end}}
+      </div>
+    </div>
+
+    {{if $d.Scans}}
+    <div class="card">
+      <header><h3>Imports covering this asset</h3></header>
+      <div class="table-wrap"><table><tbody>
+        {{range $d.Scans}}<tr>
+          <td class="wrap"><a href="/scans/{{.ID}}">{{truncate 44 .Title}}</a>
+            <div style="color: var(--text-3); font-size: .76rem">{{.Format}}</div></td>
+          <td style="white-space: nowrap; color: var(--text-3)">{{date .ScanDate}}</td>
+        </tr>{{end}}
+      </tbody></table></div>
+    </div>
+    {{end}}
+  </div>
+</div>
+{{template "foot" .}}
