@@ -82,8 +82,9 @@
   <div class="empty">
     <h3>Nothing matches</h3>
     {{if $f.Active}}<p>Try widening the filters.</p><a class="btn" href="/enclaves/{{$e.ID}}/findings">Clear filters</a>
-    {{else}}<p>No scan results have been imported for this enclave yet.</p>
-    {{if not .ReadOnly}}<a class="btn primary" href="/import?enclave={{$e.ID}}">Import results</a>{{end}}{{end}}
+    {{else}}<p>No scan results have been imported for this enclave yet. STIG checklists, SCAP
+      results, Nessus and ACAS exports and spreadsheets all land here.</p>
+    {{if not .ReadOnly}}<a class="btn primary" href="/import?enclave={{$e.ID}}">Import scan results</a>{{end}}{{end}}
   </div>
   {{end}}
 </div>

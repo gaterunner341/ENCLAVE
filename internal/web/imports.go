@@ -32,11 +32,21 @@ func (s *Server) handleImportForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	enclaves := s.Store.Enclaves()
+	selected := r.URL.Query().Get("enclave")
+	assetID := r.URL.Query().Get("asset")
+	// Arriving from an asset page pins the import to that asset, and its
+	// enclave is the only one that can apply.
+	if a, ok := s.Store.Asset(assetID); ok {
+		selected = a.EnclaveID
+	}
 	s.render(w, r, "import.html", page{
 		Title: "Import scan results", Nav: "import",
 		Data: map[string]any{
-			"Enclaves": enclaves,
-			"Selected": r.URL.Query().Get("enclave"),
+			"Enclaves":     enclaves,
+			"Selected":     selected,
+			"AssetID":      assetID,
+			"Assets":       s.assetsByEnclave(),
+			"EnclaveNames": enclaveNames(enclaves),
 			"Formats": []ingest.Format{
 				ingest.FormatCKL, ingest.FormatCKLB, ingest.FormatXCCDF,
 				ingest.FormatNessus, ingest.FormatCSV,
@@ -141,6 +151,7 @@ func (s *Server) importOptions(r *http.Request) importer.Options {
 	get := func(k string) string { return strings.TrimSpace(r.FormValue(k)) }
 	return importer.Options{
 		EnclaveID:          get("enclave_id"),
+		AssetID:            get("asset_id"),
 		PlaceByAddress:     get("place_by_address") == "on",
 		CreateAssets:       get("create_assets") != "off",
 		ImportedBy:         get("imported_by"),
@@ -345,4 +356,24 @@ func (s *Server) handleReannotate(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, "/mappings", fmt.Sprintf(
 		"Re-checked every finding against the current mappings in %s; %d changed.",
 		time.Since(start).Round(time.Millisecond), n), "")
+}
+
+// enclaveNames labels the asset picker's groups.
+func enclaveNames(enclaves []*model.Enclave) map[string]string {
+	out := make(map[string]string, len(enclaves))
+	for _, e := range enclaves {
+		out[e.ID] = e.Name
+	}
+	return out
+}
+
+// assetsByEnclave groups the inventory for the import form's asset picker, so
+// a person can attach results to a machine they already track rather than
+// hoping the file's hostname matches it.
+func (s *Server) assetsByEnclave() map[string][]*model.Asset {
+	out := map[string][]*model.Asset{}
+	for _, a := range s.Store.AllAssets() {
+		out[a.EnclaveID] = append(out[a.EnclaveID], a)
+	}
+	return out
 }

@@ -283,3 +283,109 @@ func TestScanRecordsWhatItProduced(t *testing.T) {
 		t.Error("deleting an import should remove the findings it produced")
 	}
 }
+
+func TestPinningAnImportToOneAsset(t *testing.T) {
+	im, st := fixture(t)
+	enclave(t, st, "CORE", "10.20.0.0/16")
+	// The inventory knows this machine by a name the checklist does not use,
+	// which is the case that makes matching fail and duplicates appear.
+	curated := &model.Asset{
+		EnclaveID: "CORE", Name: "PAY-APP-PROD-01", Owner: "Platform team",
+		Criticality: model.CritMission, Role: "Payment processing",
+		Type: model.AssetServer,
+	}
+	if err := st.PutAsset(curated); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, err := im.Apply(parse(t, "sample.ckl"), Options{
+		EnclaveID: "CORE", CreateAssets: true, AssetID: curated.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.AssetsCreated != 0 || sum.AssetsMatched != 1 {
+		t.Fatalf("pinning should attach to the existing asset, not create one: %+v", sum)
+	}
+	if sum.Attached != "PAY-APP-PROD-01" {
+		t.Errorf("the summary should name what it attached to, got %q", sum.Attached)
+	}
+	if got := len(st.Assets("CORE")); got != 1 {
+		t.Fatalf("a second asset was created despite pinning: %d", got)
+	}
+	got, _ := st.Asset(curated.ID)
+	if got.Name != "PAY-APP-PROD-01" {
+		t.Errorf("the checklist renamed the asset to %q", got.Name)
+	}
+	if got.Owner != "Platform team" || got.Criticality != model.CritMission {
+		t.Errorf("curated detail was lost: %+v", got)
+	}
+	// The scan still contributes what it legitimately knows.
+	if got.OS == "" || got.LastSeen == nil {
+		t.Error("the import should still fill in the platform and last-seen date")
+	}
+	for _, f := range st.Findings("CORE") {
+		if f.AssetID != curated.ID {
+			t.Error("a finding was filed against something other than the pinned asset")
+		}
+	}
+}
+
+func TestPinningOverridesPlacementByAddress(t *testing.T) {
+	im, st := fixture(t)
+	enclave(t, st, "CORE", "10.20.0.0/16")
+	enclave(t, st, "MGMT", "10.20.9.0/24")
+	target := &model.Asset{EnclaveID: "MGMT", Name: "core-switch-01", Type: model.AssetNetwork}
+	if err := st.PutAsset(target); err != nil {
+		t.Fatal(err)
+	}
+	// sample.nessus describes two hosts, one of which would be placed in CORE.
+	sum, err := im.Apply(parse(t, "sample.nessus"), Options{
+		EnclaveID: "CORE", CreateAssets: true, PlaceByAddress: true, AssetID: target.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Assets("CORE")) != 0 {
+		t.Error("pinning should stop placement by address scattering results")
+	}
+	if len(st.Findings("MGMT")) == 0 {
+		t.Error("nothing reached the pinned asset")
+	}
+	// A file describing several targets pinned to one asset is worth saying out
+	// loud rather than doing quietly.
+	if len(sum.Warnings) == 0 {
+		t.Error("pinning a multi-target file to one asset should warn")
+	}
+}
+
+func TestPinningToAnUnknownAssetIsRefused(t *testing.T) {
+	im, st := fixture(t)
+	enclave(t, st, "CORE", "10.20.0.0/16")
+	if _, err := im.Apply(parse(t, "sample.ckl"), Options{
+		EnclaveID: "CORE", CreateAssets: true, AssetID: "no-such-asset",
+	}); err == nil {
+		t.Error("pinning to an asset that does not exist should be refused")
+	}
+}
+
+func TestPinnedReimportUpdatesRatherThanDuplicating(t *testing.T) {
+	im, st := fixture(t)
+	enclave(t, st, "CORE", "10.20.0.0/16")
+	a := &model.Asset{EnclaveID: "CORE", Name: "PAY-APP-PROD-01", Type: model.AssetServer}
+	if err := st.PutAsset(a); err != nil {
+		t.Fatal(err)
+	}
+	opts := Options{EnclaveID: "CORE", CreateAssets: true, AssetID: a.ID}
+	if _, err := im.Apply(parse(t, "sample.ckl"), opts); err != nil {
+		t.Fatal(err)
+	}
+	before := len(st.Findings("CORE"))
+	sum, err := im.Apply(parse(t, "sample.ckl"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.FindingsAdded != 0 || sum.FindingsUpdated != before {
+		t.Errorf("a second pinned import should update: %+v", sum)
+	}
+}

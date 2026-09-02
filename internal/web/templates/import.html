@@ -3,9 +3,9 @@
 <div class="page-head">
   <div class="grow">
     <h1>Import scan results</h1>
-    <p class="lede">ENCLAVE reads the files your tools already produce. Structured formats are
-      applied straight away; a spreadsheet stops at a mapping screen so you can see what was
-      guessed before anything is written.</p>
+    <p class="lede">STIG checklists, SCAP results, Nessus and ACAS exports, and spreadsheets.
+      Structured formats are applied straight away; a spreadsheet stops at a mapping screen so
+      you can see what was guessed before anything is written.</p>
   </div>
 </div>
 
@@ -25,7 +25,9 @@
       <form method="post" action="/import" enctype="multipart/form-data">
         <div class="field">
           <label for="file">Result file
-            <span class="hint">.ckl, .cklb, .xml, .nessus, .csv</span></label>
+            <span class="hint">A STIG checklist (.ckl or .cklb), SCAP results (.xml),
+              a Nessus or ACAS export (.nessus), or a spreadsheet (.csv). The format is
+              worked out from the file itself, not its extension.</span></label>
           <input type="file" id="file" name="file" required
                  accept=".ckl,.cklb,.xml,.nessus,.csv,.tsv,.txt,text/csv,text/xml,application/xml,application/json">
         </div>
@@ -33,6 +35,22 @@
           <label for="enclave_id">Enclave</label>
           <select id="enclave_id" name="enclave_id" required>
             {{range $d.Enclaves}}<option value="{{.ID}}" {{if eq .ID $d.Selected}}selected{{end}}>{{.Name}}</option>{{end}}
+          </select>
+        </div>
+        <div class="field">
+          <label for="asset_id">Attach to one host
+            <span class="hint">Leave this alone and each target in the file is matched to the
+              inventory on serial number, then hostname, then address, and added if it is new.
+              Choose a host to pin every result in the file to that machine instead, which is
+              what you want when a checklist records a name the inventory does not use.</span></label>
+          <select id="asset_id" name="asset_id">
+            <option value="">Work it out from the file</option>
+            {{range $d.Enclaves}}{{$eid := .ID}}
+            {{with index $d.Assets $eid}}
+            <optgroup label="{{index $.Data.EnclaveNames $eid}}">
+              {{range .}}<option value="{{.ID}}" {{if eq .ID $d.AssetID}}selected{{end}}>{{.DisplayName}}{{if ne .Platform "Unknown"}} · {{truncate 40 .Platform}}{{end}}</option>{{end}}
+            </optgroup>
+            {{end}}{{end}}
           </select>
         </div>
         <div class="field">

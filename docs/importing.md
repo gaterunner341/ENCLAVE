@@ -28,6 +28,22 @@ Nothing a person has set on an asset record is overwritten by an import. A scan
 fills in blank fields and contributes addresses and a last-seen date; it does
 not change the owner, the criticality or the role.
 
+**Pinning an import to one host.** Matching is a heuristic, and it fails when a
+file records a name the inventory does not use — a checklist that says
+`WIN-A4F2K9` for a machine you track as `PAY-APP-PROD-01`, say. Left alone, that
+creates a second record for a machine you already have.
+
+The **Attach to one host** field on the import form, and `--asset` on the command
+line, pin every result in the file to a machine you name instead. Pinning
+overrides both the matching heuristic and placement by address, so a file cannot
+scatter results across the inventory; a file describing several targets that is
+pinned to one host says so in the import summary rather than doing it quietly. A
+pinned import never renames the host it is attached to.
+
+The quickest route is the **Import results for this host** button on a host's own
+page, or the **Import** link on its row in the assets list. Both open the import
+form already pinned to that machine.
+
 ## STIG checklists
 
 Both checklist formats are read: `.ckl` from STIG Viewer 2, and `.cklb` JSON

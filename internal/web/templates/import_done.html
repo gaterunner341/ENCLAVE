@@ -16,7 +16,7 @@
   <div class="stat"><div class="label">Findings updated</div><div class="value">{{comma $s.FindingsUpdated}}</div>
     <div class="note">already known, refreshed</div></div>
   <div class="stat"><div class="label">Assets matched</div><div class="value">{{comma $s.AssetsMatched}}</div>
-    <div class="note">{{comma $s.AssetsCreated}} created</div></div>
+    <div class="note">{{if $s.Attached}}attached to {{$s.Attached}}{{else}}{{comma $s.AssetsCreated}} created{{end}}</div></div>
   <div class="stat"><div class="label">Unmapped</div><div class="value">{{comma $s.Unmapped}}</div>
     <div class="note">reached no control</div></div>
 </div>

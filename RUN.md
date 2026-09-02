@@ -82,14 +82,27 @@ CIS Controls v8 Implementation Group 2, whichever your organisation uses.
 **3. Import a scan.** Click **Import**, choose your enclave, and upload whatever
 you have:
 
-- a STIG checklist (`.ckl` or `.cklb`)
-- SCAP results (`.xml`)
+- a STIG checklist (`.ckl` from STIG Viewer 2, or `.cklb` from STIG Viewer 3)
+- SCAP results (`.xml`, XCCDF or ARF)
 - a Nessus or ACAS export (`.nessus`)
 - any vulnerability export saved as CSV
 
 Structured files import immediately. A CSV stops at a mapping screen showing
 which columns it recognised, so you can correct the guess before anything is
 written.
+
+**Adding a host, or adding compliance to one you already track.** Both are the
+same upload. By default each target in the file is matched against the inventory
+on serial number, then hostname, then address, and added if it is new — so
+uploading a checklist for a machine ENCLAVE has never seen creates it.
+
+When the file records a name your inventory does not use, matching fails and you
+would get a duplicate. Use **Attach to one host** on the import form to pin every
+result in the file to a machine you choose. The quickest way there is the
+**Import results for this host** button on the host's own page, or the **Import**
+link on its row in the assets list: both open the form already pinned to it. A
+pinned import contributes the platform detail and the dates, and never renames
+the host or touches its owner, criticality or role.
 
 **4. Load the real CCI list.** If you imported STIG or SCAP results, this is the
 step that makes the gap analysis useful. Download DISA's `U_CCI_List.xml` and
@@ -118,6 +131,7 @@ enclave enclave add --id CORE --name "Core Operations" \
     --cidr 10.20.0.0/16 --baseline nist-800-53r5:moderate
 
 enclave import --enclave CORE scan.ckl results.nessus
+enclave import --enclave CORE --asset asset-2026...-0001 scan.ckl
 enclave import --enclave CORE --place-by-address estate-wide.nessus
 
 enclave export findings  --enclave CORE > findings.csv

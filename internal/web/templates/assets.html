@@ -8,7 +8,8 @@
   </div>
   <div>
     <a class="btn" href="/export/assets?enclave={{$e.ID}}">Export</a>
-    {{if not .ReadOnly}}<a class="btn primary" href="/enclaves/{{$e.ID}}/assets/new">Add asset</a>{{end}}
+    {{if not .ReadOnly}}<a class="btn" href="/enclaves/{{$e.ID}}/assets/new">Add by hand</a>
+    <a class="btn primary" href="/import?enclave={{$e.ID}}">Import results</a>{{end}}
   </div>
 </div>
 
@@ -44,6 +45,7 @@
         <th data-sort="text">Addresses</th><th data-sort="text">Criticality</th>
         <th class="num" data-sort="number">Open</th><th data-sort="text">Worst</th>
         <th data-sort="text">Last seen</th><th class="num" data-sort="number">Score</th>
+        <th></th>
       </tr></thead>
       <tbody>
       {{range $d.Rows}}{{$a := .Asset}}
@@ -58,6 +60,7 @@
         <td>{{if .Open}}<span class="badge {{severityClass .Worst}}">{{.Worst.Label}}</span>{{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
         <td style="white-space: nowrap">{{if .LastSeen}}{{dateP .LastSeen}}{{if .Stale}}<div><span class="badge sev-medium">stale</span></div>{{end}}{{else}}<span class="badge plain">never scanned</span>{{end}}</td>
         <td class="num">{{num .Score}}</td>
+        <td>{{if not $.ReadOnly}}<a class="btn small" href="/import?enclave={{$e.ID}}&amp;asset={{$a.ID}}">Import</a>{{end}}</td>
       </tr>
       {{end}}
       </tbody>

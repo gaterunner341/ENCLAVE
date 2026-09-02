@@ -82,7 +82,8 @@ func usage() {
 
   enclave                                     serve on 127.0.0.1:8080 and open a browser
   enclave serve [--addr HOST:PORT] [--data DIR] [--read-only] [--no-browser]
-  enclave import --enclave ID [flags] FILE... load scan results without the browser
+  enclave import --enclave ID [--asset ID] FILE...
+                                              load scan results without the browser
   enclave export KIND [--enclave ID]          write assets, findings, baseline or risks as CSV
   enclave enclave add --id ID --name NAME     create an enclave
   enclave enclave list                        list enclaves
@@ -246,6 +247,7 @@ func cmdImport(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	dir := fs.String("data", "", "data directory")
 	enclaveID := fs.String("enclave", "", "enclave the results belong to (required)")
+	assetID := fs.String("asset", "", "attach every result to this asset, whatever the file calls the target")
 	by := fs.String("by", "", "who is importing")
 	notes := fs.String("notes", "", "note recorded against the import")
 	place := fs.Bool("place-by-address", false, "route assets to the enclave whose range matches")
@@ -271,7 +273,7 @@ func cmdImport(args []string) error {
 	}
 	im := importer.New(st, cats, maps)
 	opts := importer.Options{
-		EnclaveID: *enclaveID, PlaceByAddress: *place,
+		EnclaveID: *enclaveID, AssetID: *assetID, PlaceByAddress: *place,
 		CreateAssets: !*noCreate, ImportedBy: *by, Notes: *notes,
 		DefaultCriticality: model.Criticality(*crit),
 	}

@@ -7,6 +7,7 @@
     <p class="lede">{{$a.Type.Label}}{{if $a.Role}} · {{$a.Role}}{{end}} · {{$a.Platform}}</p>
   </div>
   <div>
+    {{if not .ReadOnly}}<a class="btn primary" href="/import?enclave={{$a.EnclaveID}}&amp;asset={{$a.ID}}">Import results for this host</a>{{end}}
     {{if not .ReadOnly}}<a class="btn" href="/assets/{{$a.ID}}/edit">Edit</a>{{end}}
     {{if $e}}<a class="btn" href="/enclaves/{{$e.ID}}/findings?asset={{$a.ID}}">All findings</a>{{end}}
   </div>
@@ -43,7 +44,13 @@
           </tbody>
         </table>
       </div>
-      {{else}}<div class="empty"><p>No findings have been recorded against this asset.</p></div>{{end}}
+      {{else}}<div class="empty">
+        <h3>Nothing recorded against this host yet</h3>
+        <p>Upload a STIG checklist, SCAP results or a vulnerability scan for it. Pinning the
+           import to this host attaches every result in the file here, whatever hostname the
+           file happens to carry.</p>
+        {{if not $.ReadOnly}}<a class="btn primary" href="/import?enclave={{$a.EnclaveID}}&amp;asset={{$a.ID}}">Import results for this host</a>{{end}}
+      </div>{{end}}
     </div>
 
     {{if $d.Controls}}

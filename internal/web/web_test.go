@@ -516,3 +516,110 @@ func TestUploadCapIsEnforced(t *testing.T) {
 		t.Error("an oversized upload should be refused with a message")
 	}
 }
+
+func TestImportIsReachableFromTheAssetPages(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+
+	// The asset page has to offer an import pinned to that host, or the only
+	// way to add compliance for a machine is to guess that the top-level
+	// Import page will match it by name.
+	page := h.get("/assets/" + a.ID).Body.String()
+	want := "/import?enclave=" + a.EnclaveID + "&amp;asset=" + a.ID
+	if !strings.Contains(page, want) {
+		t.Errorf("the asset page does not link to a pinned import (%s)", want)
+	}
+	if !strings.Contains(page, "Import results for this host") {
+		t.Error("the asset page does not say it can import results for the host")
+	}
+
+	list := h.get("/enclaves/" + a.EnclaveID + "/assets").Body.String()
+	if !strings.Contains(list, "/import?enclave="+a.EnclaveID) {
+		t.Error("the assets list does not offer an import")
+	}
+	if !strings.Contains(list, want) {
+		t.Error("the assets list does not offer a per-row pinned import")
+	}
+}
+
+func TestImportFormOffersAndPreselectsTheAsset(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+
+	plain := h.get("/import").Body.String()
+	if !strings.Contains(plain, `name="asset_id"`) {
+		t.Fatal("the import form has no way to attach results to a known host")
+	}
+	if !strings.Contains(plain, "STIG checklist") {
+		t.Error("the import form never mentions STIG checklists, so nobody will know it reads them")
+	}
+	if !strings.Contains(plain, a.DisplayName()) {
+		t.Error("the asset picker does not list the inventory")
+	}
+
+	// Arriving from an asset page preselects that host and its enclave.
+	pinned := h.get("/import?enclave=" + a.EnclaveID + "&asset=" + a.ID).Body.String()
+	if !strings.Contains(pinned, `value="`+a.ID+`" selected`) {
+		t.Error("the asset picker did not preselect the host the link came from")
+	}
+	if !strings.Contains(pinned, `value="`+a.EnclaveID+`" selected`) {
+		t.Error("the enclave was not preselected from the asset")
+	}
+}
+
+func TestUploadingAChecklistPinnedToAHost(t *testing.T) {
+	h := newHarness(t)
+	// A host the inventory knows by a name no checklist will carry.
+	curated := &model.Asset{
+		EnclaveID: "CORE", Name: "PAY-APP-PROD-01", Type: model.AssetServer,
+		Criticality: model.CritMission, Owner: "Platform team",
+	}
+	if err := h.Store.PutAsset(curated); err != nil {
+		t.Fatal(err)
+	}
+	before := len(h.Store.Assets("CORE"))
+
+	body, err := os.ReadFile(filepath.Join("..", "..", "testdata", "sample.ckl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := h.upload("/import", "file", "sample.ckl", body, map[string]string{
+		"enclave_id": "CORE", "asset_id": curated.ID, "create_assets": "on",
+	})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Import complete") {
+		t.Fatalf("got %d: %s", rec.Code, truncateBody(rec.Body.String()))
+	}
+	if !strings.Contains(rec.Body.String(), "attached to PAY-APP-PROD-01") {
+		t.Error("the summary should say which host the results were attached to")
+	}
+	if got := len(h.Store.Assets("CORE")); got != before {
+		t.Errorf("pinning still created a host: %d, was %d", got, before)
+	}
+	got, _ := h.Store.Asset(curated.ID)
+	if got.Name != "PAY-APP-PROD-01" || got.Criticality != model.CritMission {
+		t.Errorf("the checklist overwrote the inventory record: %+v", got)
+	}
+	if len(h.Store.AssetFindings(curated.ID)) == 0 {
+		t.Error("no findings were attached to the pinned host")
+	}
+	// The compliance now shows on that host's page.
+	page := h.get("/assets/" + curated.ID).Body.String()
+	if !strings.Contains(page, "administrative privileges") {
+		t.Error("the host page does not show the checklist results")
+	}
+}
+
+func TestPinnedCSVImportCarriesTheAssetThroughTheMappingScreen(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+	body, err := os.ReadFile(filepath.Join("..", "..", "testdata", "sample-vulns.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := h.upload("/import", "file", "sample-vulns.csv", body, map[string]string{
+		"enclave_id": "CORE", "asset_id": a.ID, "create_assets": "on",
+	})
+	if !strings.Contains(rec.Body.String(), `name="asset_id" value="`+a.ID+`"`) {
+		t.Error("the mapping screen dropped the pinned host, so confirming would scatter the rows")
+	}
+}

@@ -203,3 +203,25 @@ func TestBadBaselineIsRejected(t *testing.T) {
 		t.Error("--name should be required")
 	}
 }
+
+func TestImportCanBePinnedToAnAssetFromTheCommandLine(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := capture(t, dir, "enclave", "add", "--id", "CORE", "--name", "Core",
+		"--cidr", "10.20.0.0/16"); err != nil {
+		t.Fatal(err)
+	}
+	ckl := filepath.Join("..", "..", "testdata", "sample.ckl")
+	// Import once so there is an asset to pin the second import to.
+	if _, err := capture(t, dir, "import", "--enclave", "CORE", ckl); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := capture(t, dir, "export", "assets")
+	if strings.Count(strings.TrimSpace(out), "\n") != 1 {
+		t.Fatalf("expected one asset after the first import:\n%s", out)
+	}
+	// Anything can be pinned; an unknown identifier has to be refused rather
+	// than quietly falling back to matching.
+	if _, err := capture(t, dir, "import", "--enclave", "CORE", "--asset", "nope", ckl); err == nil {
+		t.Error("--asset with an unknown identifier should be refused")
+	}
+}

@@ -24,6 +24,12 @@ type Options struct {
 	// PlaceByAddress routes each asset to the enclave whose network range
 	// contains its address, falling back to EnclaveID.
 	PlaceByAddress bool
+	// AssetID attaches every result in the file to one named asset, whatever
+	// the file says the target was called. A STIG checklist often records a
+	// hostname that does not match the inventory, and without this the import
+	// would create a second record for a machine that is already tracked.
+	// It overrides both asset matching and placement by address.
+	AssetID string
 	// CreateAssets allows the import to add assets it has not seen before.
 	// Turning it off makes an import strictly additive to a curated inventory.
 	CreateAssets bool
@@ -37,9 +43,12 @@ type Options struct {
 
 // Summary is what the import screen reports back.
 type Summary struct {
-	ScanID          string
-	AssetsCreated   int
-	AssetsMatched   int
+	ScanID        string
+	AssetsCreated int
+	AssetsMatched int
+	// Attached names the asset every result was pinned to, when the import was
+	// told to attach to one.
+	Attached        string
 	FindingsAdded   int
 	FindingsUpdated int
 	Unmapped        int
@@ -91,9 +100,29 @@ func (im *Importer) Apply(res *ingest.Result, opts Options) (*Summary, error) {
 	counts := map[string]int{}
 	var allFindings []*model.Finding
 
+	// An import pinned to one asset resolves it once, so that a file describing
+	// several targets cannot silently scatter results across the inventory.
+	var pinned *model.Asset
+	if opts.AssetID != "" {
+		a, ok := im.Store.Asset(opts.AssetID)
+		if !ok {
+			return nil, fmt.Errorf("no asset %q to attach these results to", opts.AssetID)
+		}
+		pinned = a
+		sum.Attached = a.DisplayName()
+		if len(res.Hosts) > 1 {
+			sum.Warnings = append(sum.Warnings, fmt.Sprintf(
+				"the file describes %d targets and every one of them was attached to %s, because the import was pinned to that asset",
+				len(res.Hosts), a.DisplayName()))
+		}
+	}
+
 	for _, h := range res.Hosts {
 		enclaveID := opts.EnclaveID
-		if opts.PlaceByAddress {
+		switch {
+		case pinned != nil:
+			enclaveID = pinned.EnclaveID
+		case opts.PlaceByAddress:
 			for _, ip := range h.IPs {
 				if e, ok := im.Store.PlaceByAddress(ip); ok {
 					enclaveID = e.ID
@@ -103,7 +132,10 @@ func (im *Importer) Apply(res *ingest.Result, opts Options) (*Summary, error) {
 		}
 		sum.Placed[enclaveID]++
 
-		asset, matched := im.Store.MatchAsset(enclaveID, h.Name, h.Serial, h.IPs)
+		asset, matched := pinned, pinned != nil
+		if pinned == nil {
+			asset, matched = im.Store.MatchAsset(enclaveID, h.Name, h.Serial, h.IPs)
+		}
 		if !matched {
 			if !opts.CreateAssets {
 				sum.Warnings = append(sum.Warnings, fmt.Sprintf(
@@ -122,6 +154,12 @@ func (im *Importer) Apply(res *ingest.Result, opts Options) (*Summary, error) {
 			sum.AssetsMatched++
 		}
 
+		if pinned != nil {
+			// The inventory name is the one people know the machine by, so a
+			// pinned import contributes platform detail and dates but never
+			// renames the asset.
+			h = withoutName(h)
+		}
 		applyHost(asset, h, enclaveID, scan.ScanDate)
 		if err := im.Store.PutAsset(asset); err != nil {
 			sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %v", displayName(h), err))
@@ -276,6 +314,15 @@ func (im *Importer) Reannotate(enclaveID string) (int, error) {
 		return 0, err
 	}
 	return changed, nil
+}
+
+// withoutName copies a parsed host with its identifying fields cleared, so an
+// import pinned to a chosen asset cannot overwrite the name that asset is known
+// by in the inventory.
+func withoutName(h *ingest.Host) *ingest.Host {
+	cp := *h
+	cp.Name, cp.FQDN = "", ""
+	return &cp
 }
 
 func displayName(h *ingest.Host) string {

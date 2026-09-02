@@ -7,7 +7,7 @@
     {{if $e.Description}}<p class="lede">{{$e.Description}}</p>{{end}}
   </div>
   <div>
-    {{if not .ReadOnly}}<a class="btn" href="/import?enclave={{$e.ID}}">Import results</a>
+    {{if not .ReadOnly}}<a class="btn primary" href="/import?enclave={{$e.ID}}">Import scan results</a>
     <a class="btn" href="/enclaves/{{$e.ID}}/edit">Settings</a>{{end}}
   </div>
 </div>

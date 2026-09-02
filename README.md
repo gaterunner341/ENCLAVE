@@ -46,6 +46,12 @@ about, so re-importing next month's scan updates the rows rather than duplicatin
 them: the first-seen date stays, finding age stays meaningful, and any decision
 you recorded is left alone.
 
+Uploading a checklist for a machine ENCLAVE has never seen adds it. Uploading one
+for a machine you already track attaches the compliance to it: results are matched
+on serial number, then hostname, then address, and when the file records a name
+your inventory does not use you can pin the import to the host you mean, from a
+button on that host's own page.
+
 **Control baselines.** NIST SP 800-53 Rev 5 with its low, moderate and high
 baselines; the CIS Critical Security Controls v8 with its three Implementation
 Groups; and NIST CSF 2.0. All three are built in. Your own framework loads from
