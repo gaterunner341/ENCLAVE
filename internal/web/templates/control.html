@@ -1,0 +1,122 @@
+{{template "head" .}}
+{{$d := .Data}}{{$e := .Enclave}}{{$c := $d.Control}}{{$cat := $d.Catalog}}{{$g := $d.Gap}}{{$a := $d.Assessment}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs"><a href="/enclaves/{{$e.ID}}/baseline?catalog={{$cat.ID}}">{{$cat.Name}}</a>
+      / {{$c.FamilyID}} {{$cat.FamilyName $c.FamilyID}}</div>
+    <h1><span class="mono">{{$c.ID}}</span> {{$c.Title}}</h1>
+    <div class="pill-row" style="margin-top: .4rem">
+      <span class="badge {{stateClass $g.State}}">{{$g.State.Label}}</span>
+      {{if $c.Parent}}<span class="badge plain">enhancement of {{$c.Parent}}</span>{{end}}
+      {{range $c.Profiles}}<span class="badge plain">{{$cat.ProfileName .}}</span>{{end}}
+    </div>
+  </div>
+</div>
+
+<div class="split">
+  <div>
+    {{if or $c.Statement $c.Discussion}}
+    <div class="card">
+      <header><h3>The control</h3></header>
+      <div class="card-body">
+        {{if $c.Statement}}<div class="prose">{{$c.Statement}}</div>{{end}}
+        {{if $c.Discussion}}<div class="prose box" style="margin-top: .75rem">{{$c.Discussion}}</div>{{end}}
+      </div>
+    </div>
+    {{end}}
+
+    <div class="card">
+      <header><h2>Evidence</h2><span class="spacer"></span>
+        <span class="badge plain">{{$g.OpenCount}} open · {{$g.PassCount}} passing</span></header>
+      {{if $g.Findings}}
+      <div class="table-wrap"><table>
+        <thead><tr><th>Severity</th><th>Finding</th><th>Asset</th><th>Status</th><th class="num">Age</th></tr></thead>
+        <tbody>{{range $g.Findings}}
+        <tr>
+          <td><span class="badge {{severityClass .Severity}}">{{.Severity.Label}}</span></td>
+          <td class="wrap"><a href="/findings/{{.ID}}">{{truncate 96 .Title}}</a></td>
+          <td>{{template "assetlink" dict "Index" $d.AssetIndex "ID" .AssetID}}</td>
+          <td>{{if .Live}}<span class="badge {{dispositionClass .Disposition}}">{{.Disposition.Label}}</span>{{else}}{{.Status.Label}}{{end}}</td>
+          <td class="num">{{days .FirstSeen}}d</td>
+        </tr>
+        {{end}}</tbody>
+      </table></div>
+      {{else}}
+      <div class="empty">
+        <p>No imported scan result maps to this control. That is not the same as the control being
+           met: it means nothing here can confirm or deny the assessment beside it.</p>
+      </div>
+      {{end}}
+    </div>
+
+    {{if $d.Related}}
+    <div class="card">
+      <header><h3>Related controls</h3></header>
+      <div class="table-wrap"><table><tbody>
+        {{range $d.Related}}
+        <tr><td class="mono"><a href="/enclaves/{{$e.ID}}/baseline/{{$cat.ID}}/{{.ID}}">{{.ID}}</a></td>
+          <td class="wrap">{{.Title}}</td></tr>
+        {{end}}
+      </tbody></table></div>
+    </div>
+    {{end}}
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h2>Assessment</h2></header>
+      <div class="card-body">
+        {{if .ReadOnly}}
+        <div class="facts">
+          <div><div class="k">Status</div><div class="v">{{$a.Status.Label}}</div></div>
+          <div><div class="k">Origination</div><div class="v">{{if $a.Origination}}{{humanise $a.Origination}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Responsible</div><div class="v">{{if $a.Responsible}}{{$a.Responsible}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Assessed</div><div class="v">{{dateP $a.AssessedAt}}{{if $a.AssessedBy}} by {{$a.AssessedBy}}{{end}}</div></div>
+        </div>
+        {{if $a.Narrative}}<div class="prose box" style="margin-top: 1rem">{{$a.Narrative}}</div>{{end}}
+        {{else}}
+        <form method="post" action="/enclaves/{{$e.ID}}/baseline/{{$cat.ID}}/{{$c.ID}}">
+          <div class="field"><label for="status">Implementation status</label>
+            <select id="status" name="status">
+              {{range implStatuses}}<option value="{{.}}" {{if eq . $a.Status}}selected{{end}}>{{.Label}}</option>{{end}}
+            </select></div>
+          <div class="field"><label for="origination">Control origination</label>
+            <select id="origination" name="origination"><option value=""></option>
+              {{range originations}}<option value="{{.}}" {{if eq . $a.Origination}}selected{{end}}>{{humanise .}}</option>{{end}}
+            </select></div>
+          <div class="field"><label for="responsible">Responsible party</label>
+            <input type="text" id="responsible" name="responsible" value="{{$a.Responsible}}"></div>
+          <div class="field"><label for="narrative">How it is implemented</label>
+            <textarea id="narrative" name="narrative" rows="8">{{$a.Narrative}}</textarea></div>
+          <div class="field"><label for="evidence">Evidence
+            <span class="hint">One reference per line: a document, a ticket, a configuration item.</span></label>
+            <textarea id="evidence" name="evidence" rows="3">{{range $a.Evidence}}{{.}}
+{{end}}</textarea></div>
+          <div class="form-grid">
+            <div class="field"><label for="assessed_by">Assessed by</label>
+              <input type="text" id="assessed_by" name="assessed_by" value="{{$a.AssessedBy}}"></div>
+            <div class="field"><label for="assessed_at">Assessed on</label>
+              <input type="date" id="assessed_at" name="assessed_at" value="{{dateInput $a.AssessedAt}}"></div>
+            <div class="field"><label for="review_due">Review due</label>
+              <input type="date" id="review_due" name="review_due" value="{{dateInput $a.ReviewDue}}"></div>
+          </div>
+          <button class="btn primary" type="submit">Save assessment</button>
+        </form>
+        {{end}}
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h3>How the state was reached</h3></header>
+      <div class="card-body" style="font-size: .84rem; color: var(--text-2)">
+        <p><strong>Claimed:</strong> {{if $a.Status.Satisfied}}yes, recorded as {{lower $a.Status.Label}}{{else}}no, recorded as {{lower $a.Status.Label}}{{end}}.</p>
+        <p><strong>Scan evidence:</strong> {{if $g.Evidence}}{{$g.OpenCount}} failing and {{$g.PassCount}} passing results across {{$g.Assets}} assets{{else}}none{{end}}.</p>
+        <p style="margin: 0"><strong>Result:</strong> {{$g.State.Label}}.
+          {{if eq (printf "%s" $g.State) "contradicted"}}The claim and the scans disagree, and the scans win.{{end}}
+          {{if eq (printf "%s" $g.State) "claimed"}}Nothing here confirms or refutes the claim.{{end}}
+          {{if eq (printf "%s" $g.State) "unassessed"}}Nobody has assessed it.{{end}}</p>
+      </div>
+    </div>
+  </div>
+</div>
+{{template "foot" .}}

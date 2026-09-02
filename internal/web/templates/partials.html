@@ -1,0 +1,120 @@
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Title}}{{.Title}} · {{end}}ENCLAVE</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="brand" href="/">EN<span>CLAVE</span></a>
+    <nav class="nav">
+      <a href="/" {{if eq .Nav "dashboard"}}class="on"{{end}}>Overview</a>
+      <a href="/enclaves" {{if eq .Nav "enclaves"}}class="on"{{end}}>Enclaves</a>
+      <a href="/import" {{if eq .Nav "import"}}class="on"{{end}}>Import</a>
+      <a href="/catalogs" {{if eq .Nav "catalogs"}}class="on"{{end}}>Baselines</a>
+      <a href="/mappings" {{if eq .Nav "mappings"}}class="on"{{end}}>Mappings</a>
+      <a href="/reports" {{if eq .Nav "reports"}}class="on"{{end}}>Reports</a>
+    </nav>
+    {{if .ReadOnly}}<span class="badge plain">Read only</span>{{end}}
+  </div>
+</header>
+{{if .Enclave}}{{template "subnav" .}}{{end}}
+<main>
+{{template "flash" .}}
+{{end}}
+
+{{define "subnav"}}
+{{$e := .Enclave}}
+<div class="subnav">
+  <div class="subnav-inner">
+    <a href="/enclaves/{{$e.ID}}" {{if eq .SubNav "overview"}}class="on"{{end}}>{{$e.Name}}</a>
+    <a href="/enclaves/{{$e.ID}}/assets" {{if eq .SubNav "assets"}}class="on"{{end}}>Assets</a>
+    <a href="/enclaves/{{$e.ID}}/findings" {{if eq .SubNav "findings"}}class="on"{{end}}>Findings</a>
+    <a href="/enclaves/{{$e.ID}}/baseline" {{if eq .SubNav "baseline"}}class="on"{{end}}>Baseline</a>
+    <a href="/enclaves/{{$e.ID}}/risk" {{if eq .SubNav "risk"}}class="on"{{end}}>Risk register</a>
+    <a href="/enclaves/{{$e.ID}}/scans" {{if eq .SubNav "scans"}}class="on"{{end}}>Imports</a>
+    <span class="spacer"></span>
+    {{if not .ReadOnly}}<a href="/enclaves/{{$e.ID}}/edit" {{if eq .SubNav "settings"}}class="on"{{end}}>Settings</a>{{end}}
+  </div>
+</div>
+{{end}}
+
+{{define "flash"}}
+{{if .Flash}}<div class="notice ok">{{.Flash}}</div>{{end}}
+{{if .Error}}<div class="notice bad">{{.Error}}</div>{{end}}
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer class="site">
+  <span>ENCLAVE {{.Version}}</span>
+  <span class="spacer"></span>
+  <span>Rendered {{datetime .Now}}</span>
+</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>
+{{end}}
+
+{{define "donut"}}
+{{/* Expects a Donut value in .D and a title in .T. */}}
+<div class="donut">
+  {{if .D.Total}}
+  <svg width="130" height="130" viewBox="0 0 130 130" role="img" aria-label="{{.T}}">
+    <circle cx="65" cy="65" r="54" fill="none" stroke="var(--surface-3)" stroke-width="16"></circle>
+    {{range .D.Segments}}
+    <circle cx="65" cy="65" r="54" fill="none" stroke-width="16"
+            stroke="currentColor"
+            stroke-dasharray="{{num .Length}} {{num $.D.Circ}}"
+            stroke-dashoffset="{{num .Offset}}"
+            style="color: var(--{{.Label}}, var(--accent))"></circle>
+    {{end}}
+  </svg>
+  <div class="donut-legend">
+    {{range .D.Segments}}
+    <div class="row">
+      <span class="swatch" style="background: var(--{{.Label}}, var(--accent))"></span>
+      <span class="grow">{{humanise .Label}}</span>
+      <span class="n">{{comma .Count}}</span>
+      <span class="n" style="color: var(--text-3); min-width: 4ch">{{printf "%.0f%%" .Pct}}</span>
+    </div>
+    {{end}}
+  </div>
+  {{else}}
+  <p style="color: var(--text-3); margin: 0">Nothing recorded yet.</p>
+  {{end}}
+</div>
+{{end}}
+
+{{define "sevbar"}}
+{{/* A stacked severity bar. Expects .Counts (map) and .Total. */}}
+{{if .Total}}
+<div class="meter-stack" title="{{.Total}} open findings">
+  {{range severities}}{{$n := index $.Counts .}}{{if $n}}
+  <span class="fill-{{.}}" style="width: {{printf "%.2f%%" (ratio $n $.Total)}}" title="{{.Label}}: {{$n}}"></span>
+  {{end}}{{end}}
+</div>
+{{else}}<span style="color: var(--text-3)">—</span>{{end}}
+{{end}}
+
+{{define "sevpills"}}
+{{range severities}}{{$n := index $.Counts .}}{{if $n}}<span class="badge {{severityClass .}}">{{.Label}} {{$n}}</span> {{end}}{{end}}
+{{end}}
+
+{{define "gapbar"}}
+{{if .Total}}
+<div class="meter-stack">
+  {{range gapStates}}{{$n := index $.Counts .}}{{if $n}}
+  <span class="fill-{{.}}" style="width: {{printf "%.2f%%" (ratio $n $.Total)}}" title="{{.Label}}: {{$n}}"></span>
+  {{end}}{{end}}
+</div>
+{{end}}
+{{end}}
+
+{{define "assetlink"}}
+{{$a := index .Index .ID}}{{if $a}}<a href="/assets/{{$a.ID}}">{{$a.DisplayName}}</a>{{else}}<span style="color: var(--text-3)">unknown asset</span>{{end}}
+{{end}}

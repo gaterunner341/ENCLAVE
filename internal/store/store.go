@@ -1,327 +1,254 @@
-// Package store is the durable half of the application: an append-only log of
-// observations, and a small state file for the things a person decided.
+// Package store persists ENCLAVE's records.
 //
-// Nothing is ever edited in place. The host view is derived by replaying the
-// log, so a wrong import can be explained rather than merely corrected.
+// The store is deliberately small: every collection is a slice held in memory,
+// written to a JSON file beside the others whenever it changes. There is no
+// database engine, no driver and no schema migration tool, because the whole
+// application has to be a single file that a person can copy onto a system and
+// run without asking anyone for anything.
+//
+// Writes are serialised behind one mutex and land through a temporary file and
+// a rename, so a process that dies mid-save leaves the previous good file in
+// place rather than a truncated one.
 package store
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/pkittelson/enclave/internal/connector"
-	"github.com/pkittelson/enclave/internal/model"
+	"github.com/gaterunner341/enclave/internal/model"
 )
 
-const (
-	logName   = "observations.jsonl"
-	stateName = "state.json"
-)
-
-// Mapping is a saved description of one feed's file format, so a recurring
-// export is described once rather than every collection.
-type Mapping struct {
-	Name       string               `json:"name"`
-	SourceID   string               `json:"source_id"`
-	SourceKind string               `json:"source_kind"`
-	Columns    map[string]string    `json:"columns"`
-	TimeLayout string               `json:"time_layout,omitempty"`
-	CreatedAt  time.Time            `json:"created_at"`
-	ColumnMap  *connector.ColumnMap `json:"-"`
-}
-
-// ImportRecord is one line of import history.
-type ImportRecord struct {
-	At           time.Time `json:"at"`
-	Filename     string    `json:"filename"`
-	SourceID     string    `json:"source_id"`
-	SourceKind   string    `json:"source_kind"`
-	Observations int       `json:"observations"`
-}
-
-// Decision records a placement a person made by hand, which always beats the
-// address ranges. Keeping it separate from the log means a re-import cannot
-// silently undo somebody's judgement.
-type Decision struct {
-	HostID    string    `json:"host_id"`
-	EnclaveID string    `json:"enclave_id,omitempty"`
-	Status    string    `json:"status,omitempty"`
-	Reason    string    `json:"reason"`
-	At        time.Time `json:"at"`
-	By        string    `json:"by"`
-}
-
-// state is everything that is not an observation.
-type state struct {
-	Enclaves  []*model.Enclave     `json:"enclaves"`
-	Mappings  []*Mapping           `json:"mappings"`
-	Imports   []ImportRecord       `json:"imports"`
-	Decisions map[string]*Decision `json:"decisions"`
-}
-
-// Store owns the data directory.
+// Store holds every record and the indexes that make the pages fast enough to
+// render without pagination tricks.
 type Store struct {
-	mu    sync.Mutex
-	dir   string
-	state state
+	mu  sync.RWMutex
+	dir string
+
+	enclaves    map[string]*model.Enclave
+	assets      map[string]*model.Asset
+	scans       map[string]*model.Scan
+	findings    map[string]*model.Finding
+	assessments map[string]*model.Assessment
+	risks       map[string]*model.RiskEntry
+
+	// findingsByAsset and findingsByEnclave avoid a full scan on every page.
+	findingsByAsset   map[string][]string
+	findingsByEnclave map[string][]string
+	assetsByEnclave   map[string][]string
+	// assetEnclave records which bucket each asset is filed under. Callers
+	// routinely hand back the stored record itself after editing it, so the
+	// record cannot be asked which enclave it used to be in.
+	assetEnclave map[string]string
+	// fingerprints deduplicates repeat imports: the same rule against the same
+	// asset updates the existing finding rather than adding another row.
+	fingerprints map[string]string
+
+	seq   uint64
+	dirty map[string]bool
 }
 
-// Open prepares a data directory, creating it if this is the first run.
+// Open loads a store from dir, creating it when it does not exist.
 func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("data directory %s: %w", dir, err)
 	}
-	s := &Store{dir: dir}
-	if err := s.loadState(); err != nil {
+	s := &Store{
+		dir:               dir,
+		enclaves:          map[string]*model.Enclave{},
+		assets:            map[string]*model.Asset{},
+		scans:             map[string]*model.Scan{},
+		findings:          map[string]*model.Finding{},
+		assessments:       map[string]*model.Assessment{},
+		risks:             map[string]*model.RiskEntry{},
+		findingsByAsset:   map[string][]string{},
+		findingsByEnclave: map[string][]string{},
+		assetsByEnclave:   map[string][]string{},
+		assetEnclave:      map[string]string{},
+		fingerprints:      map[string]string{},
+		dirty:             map[string]bool{},
+	}
+	if err := s.load(); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-// Dir reports where the data lives, so the startup banner can say so.
+// Dir is the directory the store persists into.
 func (s *Store) Dir() string { return s.dir }
 
-func (s *Store) statePath() string { return filepath.Join(s.dir, stateName) }
-func (s *Store) logPath() string   { return filepath.Join(s.dir, logName) }
+func (s *Store) path(name string) string { return filepath.Join(s.dir, name+".json") }
 
-func (s *Store) loadState() error {
-	b, err := os.ReadFile(s.statePath())
-	if os.IsNotExist(err) {
-		s.state = state{Decisions: map[string]*Decision{}}
-		return nil
+func (s *Store) load() error {
+	type target struct {
+		name string
+		into any
 	}
-	if err != nil {
-		return err
+	var (
+		enclaves    []*model.Enclave
+		assets      []*model.Asset
+		scans       []*model.Scan
+		findings    []*model.Finding
+		assessments []*model.Assessment
+		risks       []*model.RiskEntry
+	)
+	for _, t := range []target{
+		{"enclaves", &enclaves}, {"assets", &assets}, {"scans", &scans},
+		{"findings", &findings}, {"assessments", &assessments}, {"risks", &risks},
+	} {
+		b, err := os.ReadFile(s.path(t.name))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", t.name, err)
+		}
+		if len(strings.TrimSpace(string(b))) == 0 {
+			continue
+		}
+		if err := json.Unmarshal(b, t.into); err != nil {
+			return fmt.Errorf("parsing %s.json: %w", t.name, err)
+		}
 	}
-	if err := json.Unmarshal(b, &s.state); err != nil {
-		return fmt.Errorf("%s is not readable: %w", stateName, err)
+	for _, e := range enclaves {
+		s.enclaves[e.ID] = e
 	}
-	if s.state.Decisions == nil {
-		s.state.Decisions = map[string]*Decision{}
+	for _, a := range assets {
+		s.assets[a.ID] = a
+		s.assetsByEnclave[a.EnclaveID] = append(s.assetsByEnclave[a.EnclaveID], a.ID)
+		s.assetEnclave[a.ID] = a.EnclaveID
+	}
+	for _, sc := range scans {
+		s.scans[sc.ID] = sc
+	}
+	for _, f := range findings {
+		s.findings[f.ID] = f
+		s.indexFinding(f)
+	}
+	for _, a := range assessments {
+		s.assessments[a.Key()] = a
+	}
+	for _, r := range risks {
+		s.risks[r.ID] = r
 	}
 	return nil
 }
 
-// saveState writes the state file through a temporary file, so an interrupted
-// write cannot leave a half-written file where the settings used to be.
-func (s *Store) saveState() error {
-	b, err := json.MarshalIndent(s.state, "", "  ")
+func (s *Store) indexFinding(f *model.Finding) {
+	s.findingsByAsset[f.AssetID] = append(s.findingsByAsset[f.AssetID], f.ID)
+	s.findingsByEnclave[f.EnclaveID] = append(s.findingsByEnclave[f.EnclaveID], f.ID)
+	if f.Fingerprint != "" {
+		s.fingerprints[f.Fingerprint] = f.ID
+	}
+}
+
+// Save writes every collection marked dirty. It is called at the end of each
+// mutating operation, and again on shutdown.
+func (s *Store) Save() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveLocked()
+}
+
+func (s *Store) saveLocked() error {
+	writers := map[string]func() any{
+		"enclaves":    func() any { return sortedEnclaves(s.enclaves) },
+		"assets":      func() any { return sortedAssets(s.assets) },
+		"scans":       func() any { return sortedScans(s.scans) },
+		"findings":    func() any { return sortedFindings(s.findings) },
+		"assessments": func() any { return sortedAssessments(s.assessments) },
+		"risks":       func() any { return sortedRisks(s.risks) },
+	}
+	for name := range s.dirty {
+		fn, ok := writers[name]
+		if !ok {
+			continue
+		}
+		if err := writeJSON(s.path(name), fn()); err != nil {
+			return err
+		}
+		delete(s.dirty, name)
+	}
+	return nil
+}
+
+// writeJSON writes through a temporary file so an interrupted save cannot
+// truncate a good file.
+func writeJSON(path string, v any) error {
+	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := s.statePath() + ".tmp"
+	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.statePath())
+	return os.Rename(tmp, path)
 }
 
-// Append adds observations to the log. It is the only way data enters.
-func (s *Store) Append(obs []model.Observation) error {
-	if len(obs) == 0 {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	f, err := os.OpenFile(s.logPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	w := bufio.NewWriter(f)
-	enc := json.NewEncoder(w)
-	for i := range obs {
-		if err := enc.Encode(obs[i]); err != nil {
-			return err
-		}
-	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-	return f.Sync()
+// NextID mints an identifier that sorts by creation time and is unique within
+// the store. It is not a UUID: readable identifiers make the JSON files, the
+// URLs and the CSV exports easier to work with by hand.
+func (s *Store) NextID(prefix string) string {
+	s.seq++
+	return fmt.Sprintf("%s-%s-%04d", prefix, time.Now().UTC().Format("20060102150405"), s.seq%10000)
 }
 
-// Replay hands every observation, oldest first, to fn. A line that will not
-// parse is skipped rather than aborting the replay: one bad row should not
-// take the whole inventory offline.
-func (s *Store) Replay(fn func(model.Observation)) (int, error) {
-	f, err := os.Open(s.logPath())
-	if os.IsNotExist(err) {
-		return 0, nil
+func sortedEnclaves(m map[string]*model.Enclave) []*model.Enclave {
+	out := make([]*model.Enclave, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
 	}
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
-	n := 0
-	for sc.Scan() {
-		line := sc.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var obs model.Observation
-		if err := json.Unmarshal(line, &obs); err != nil {
-			continue
-		}
-		fn(obs)
-		n++
-	}
-	return n, sc.Err()
-}
-
-// RecordImport adds a line to the import history.
-func (s *Store) RecordImport(rec ImportRecord) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.state.Imports = append([]ImportRecord{rec}, s.state.Imports...)
-	if len(s.state.Imports) > 200 {
-		s.state.Imports = s.state.Imports[:200]
-	}
-	return s.saveState()
-}
-
-// Imports returns the import history, newest first.
-func (s *Store) Imports() []ImportRecord {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]ImportRecord(nil), s.state.Imports...)
-}
-
-// PutEnclave adds or replaces an enclave definition.
-func (s *Store) PutEnclave(e *model.Enclave) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, existing := range s.state.Enclaves {
-		if existing.ID == e.ID {
-			e.CreatedAt = existing.CreatedAt
-			s.state.Enclaves[i] = e
-			return s.saveState()
-		}
-	}
-	if e.CreatedAt.IsZero() {
-		e.CreatedAt = time.Now()
-	}
-	s.state.Enclaves = append(s.state.Enclaves, e)
-	return s.saveState()
-}
-
-// DeleteEnclave removes an enclave. It refuses while hosts are still placed in
-// it, because deleting one silently would leave those hosts unowned.
-func (s *Store) DeleteEnclave(id string, hosts int) error {
-	if hosts > 0 {
-		return fmt.Errorf("%s still holds %d host(s). Move them first, or change its address range.", id, hosts)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := s.state.Enclaves[:0]
-	for _, e := range s.state.Enclaves {
-		if e.ID != id {
-			out = append(out, e)
-		}
-	}
-	s.state.Enclaves = out
-	return s.saveState()
-}
-
-// ActiveEnclaves returns the defined enclaves, ordered by identifier.
-func (s *Store) ActiveEnclaves() []*model.Enclave {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := append([]*model.Enclave(nil), s.state.Enclaves...)
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
-// Enclave returns one enclave by identifier.
-func (s *Store) Enclave(id string) *model.Enclave {
-	for _, e := range s.ActiveEnclaves() {
-		if e.ID == id {
-			return e
-		}
+func sortedAssets(m map[string]*model.Asset) []*model.Asset {
+	out := make([]*model.Asset, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
 	}
-	return nil
-}
-
-// PutMapping saves a column mapping under a name.
-func (s *Store) PutMapping(m *Mapping) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, existing := range s.state.Mappings {
-		if existing.Name == m.Name {
-			m.CreatedAt = existing.CreatedAt
-			s.state.Mappings[i] = m
-			return s.saveState()
-		}
-	}
-	if m.CreatedAt.IsZero() {
-		m.CreatedAt = time.Now()
-	}
-	s.state.Mappings = append(s.state.Mappings, m)
-	return s.saveState()
-}
-
-// DeleteMapping forgets a saved mapping.
-func (s *Store) DeleteMapping(name string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := s.state.Mappings[:0]
-	for _, m := range s.state.Mappings {
-		if m.Name != name {
-			out = append(out, m)
-		}
-	}
-	s.state.Mappings = out
-	return s.saveState()
-}
-
-// SortedMappings returns the saved mappings by name.
-func (s *Store) SortedMappings() []*Mapping {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := append([]*Mapping(nil), s.state.Mappings...)
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
-// Mapping returns one saved mapping by name.
-func (s *Store) Mapping(name string) *Mapping {
-	for _, m := range s.SortedMappings() {
-		if m.Name == name {
-			return m
-		}
+func sortedScans(m map[string]*model.Scan) []*model.Scan {
+	out := make([]*model.Scan, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
 	}
-	return nil
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
-// PutDecision records a manual placement.
-func (s *Store) PutDecision(d *Decision) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if d.At.IsZero() {
-		d.At = time.Now()
+func sortedFindings(m map[string]*model.Finding) []*model.Finding {
+	out := make([]*model.Finding, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
 	}
-	s.state.Decisions[d.HostID] = d
-	return s.saveState()
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
-// Decisions returns the manual placements, keyed by host.
-func (s *Store) Decisions() map[string]*Decision {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := make(map[string]*Decision, len(s.state.Decisions))
-	for k, v := range s.state.Decisions {
-		out[k] = v
+func sortedAssessments(m map[string]*model.Assessment) []*model.Assessment {
+	out := make([]*model.Assessment, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key() < out[j].Key() })
+	return out
+}
+
+func sortedRisks(m map[string]*model.RiskEntry) []*model.RiskEntry {
+	out := make([]*model.RiskEntry, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }

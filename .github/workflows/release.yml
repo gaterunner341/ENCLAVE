@@ -5,54 +5,69 @@ on:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version to release, for example v0.1"
+      tag:
+        description: "Tag to publish under (for a manual run)"
         required: true
-        default: "v0.1"
+        default: "v0.0.0-dev"
 
 permissions:
   contents: write
 
 jobs:
   release:
+    name: Build and publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
-      - run: go test ./...
+          check-latest: true
 
-      - name: Work out the version
+      - name: Test
+        run: go test ./...
+
+      - name: Resolve the version
         id: version
-        run: echo "value=${{ inputs.version || github.ref_name }}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Build the Windows package
+      - name: Build every platform
         env:
-          GOOS: windows
-          GOARCH: amd64
-          CGO_ENABLED: "0"
           VERSION: ${{ steps.version.outputs.value }}
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags "-s -w" -o dist/ENCLAVE.exe ./cmd/enclaved
-          cp "START HERE.txt" dist/
-          cd dist && zip -r "../ENCLAVE-${VERSION}-windows.zip" .
+          build() {
+            goos=$1; goarch=$2; ext=$3
+            out="dist/enclave-${goos}-${goarch}${ext}"
+            GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build -trimpath \
+              -ldflags "-s -w -X main.version=${VERSION}" -o "$out" ./cmd/enclave
+            echo "built $out"
+          }
+          build windows amd64 .exe
+          build windows arm64 .exe
+          build linux   amd64 ""
+          build linux   arm64 ""
+          build darwin  amd64 ""
+          build darwin  arm64 ""
 
-      - name: Checksum
-        run: sha256sum ENCLAVE-*-windows.zip | tee SHA256SUMS.txt
+          # The Windows build is also published under the plain name people
+          # expect to be handed.
+          cp dist/enclave-windows-amd64.exe dist/ENCLAVE.exe
 
-      - uses: softprops/action-gh-release@v2
+          cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.value }}
-          name: ENCLAVE ${{ steps.version.outputs.value }}
-          body: |
-            Windows build of ENCLAVE. Unzip anywhere and double-click `ENCLAVE.exe`.
-            It serves on http://127.0.0.1:8080 and stores data in an `enclave-data`
-            folder beside the executable.
-
-            The binary is unsigned, so Windows SmartScreen will warn on first run:
-            More info, then Run anyway. Verify the download against `SHA256SUMS.txt`.
-          files: |
-            ENCLAVE-*-windows.zip
-            SHA256SUMS.txt
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

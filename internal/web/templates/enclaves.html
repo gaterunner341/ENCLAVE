@@ -1,0 +1,53 @@
+{{template "head" .}}
+{{$d := .Data}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Enclaves</h1>
+    <p class="lede">Each enclave is a bounded system with its own inventory, its own scan results
+      and its own control baseline. Address ranges decide where an imported asset lands.</p>
+  </div>
+  {{if not .ReadOnly}}<div><a class="btn primary" href="/enclaves/new">New enclave</a></div>{{end}}
+</div>
+
+{{if not $d.Rows}}
+<div class="card"><div class="empty">
+  <h3>Nothing here yet</h3>
+  <p>Create an enclave, give it the address ranges it owns, then import a scan.</p>
+  {{if not .ReadOnly}}<a class="btn primary" href="/enclaves/new">New enclave</a>{{end}}
+</div></div>
+{{else}}
+<div class="card">
+  <div class="table-wrap">
+    <table data-sortable>
+      <thead><tr>
+        <th data-sort="text">Enclave</th><th data-sort="text">Owner</th>
+        <th data-sort="text">Environment</th><th data-sort="text">Categorisation</th>
+        <th>Networks</th><th data-sort="text">Authorisation</th>
+        <th class="num" data-sort="number">Assets</th><th class="num" data-sort="number">Open</th>
+        <th class="num" data-sort="number">Risk</th>
+      </tr></thead>
+      <tbody>
+      {{range $d.Rows}}{{$e := .Enclave}}
+      <tr>
+        <td><a href="/enclaves/{{$e.ID}}"><strong>{{$e.Name}}</strong></a>
+          <div class="mono" style="color: var(--text-3); font-size: .75rem">{{$e.ID}}</div></td>
+        <td>{{if $e.Owner}}{{$e.Owner}}{{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
+        <td>{{$e.Environment}}{{if $e.Status}}<div style="color: var(--text-3); font-size: .78rem">{{$e.Status}}</div>{{end}}</td>
+        <td><span class="badge plain">{{$e.Categorization.Label}}</span>
+          <div style="color: var(--text-3); font-size: .74rem">C {{$e.Confidentiality.Label}} · I {{$e.Integrity.Label}} · A {{$e.Availability.Label}}</div></td>
+        <td class="mono" style="font-size: .75rem">
+          {{range $e.Networks}}{{.CIDR}}{{if .Label}} <span style="color: var(--text-3)">{{.Label}}</span>{{end}}<br>{{else}}<span style="color: var(--text-3)">none</span>{{end}}</td>
+        <td>{{if $e.AuthorizationStatus}}{{$e.AuthorizationStatus}}
+            {{if $e.AuthorizationExpires}}<div style="font-size: .74rem; color: var(--text-3)">expires {{dateP $e.AuthorizationExpires}}</div>{{end}}
+            {{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
+        <td class="num">{{comma .Assets}}</td>
+        <td class="num">{{comma .Open}}</td>
+        <td class="num"><strong class="{{bandClass .Band}}">{{num .Index}}</strong></td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}
+{{template "foot" .}}

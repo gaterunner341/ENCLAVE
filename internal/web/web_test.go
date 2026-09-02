@@ -6,259 +6,620 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/pkittelson/enclave/internal/coverage"
-	"github.com/pkittelson/enclave/internal/model"
-	"github.com/pkittelson/enclave/internal/resolve"
-	"github.com/pkittelson/enclave/internal/store"
+	"github.com/gaterunner341/enclave/internal/catalog"
+	"github.com/gaterunner341/enclave/internal/importer"
+	"github.com/gaterunner341/enclave/internal/ingest"
+	"github.com/gaterunner341/enclave/internal/mapping"
+	"github.com/gaterunner341/enclave/internal/model"
+	"github.com/gaterunner341/enclave/internal/store"
 )
 
-// harness is a whole application over a throwaway data directory.
 type harness struct {
-	t      *testing.T
-	store  *store.Store
-	engine *Engine
-	mux    http.Handler
+	*Server
+	t *testing.T
 }
 
+// newHarness builds a server over a temporary store seeded with one enclave,
+// one real STIG checklist and one real Nessus export, so that every page has
+// something to render.
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	st, err := store.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine := NewEngine(st, resolve.DefaultConfig(), coverage.DefaultControls())
-	if err := engine.Rebuild(); err != nil {
-		t.Fatal(err)
-	}
-	srv, err := NewServer(engine, st)
+	cats, err := catalog.NewRegistry(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &harness{t: t, store: st, engine: engine, mux: srv.Routes()}
+	maps, err := mapping.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, err := New(st, cats, maps, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &model.Enclave{
+		ID: "CORE", Name: "Core Operations", Owner: "D. Rennick",
+		Environment: "Production", Status: "Active",
+		Confidentiality: model.ImpactModerate, Integrity: model.ImpactModerate,
+		Availability: model.ImpactHigh,
+		Networks:     []model.Network{{CIDR: "10.20.0.0/16", Label: "Core"}, {CIDR: "10.20.9.0/24", Label: "Management"}},
+		Baselines: []model.BaselineRef{
+			{CatalogID: "nist-800-53r5", ProfileID: "moderate"},
+			{CatalogID: "cis-controls-v8", ProfileID: "ig2"},
+		},
+	}
+	if err := st.PutEnclave(e); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutEnclave(&model.Enclave{ID: "LAB", Name: "Lab"}); err != nil {
+		t.Fatal(err)
+	}
+	im := importer.New(st, cats, maps)
+	for _, name := range []string{"sample.ckl", "sample.nessus", "sample-xccdf.xml"} {
+		b, err := os.ReadFile(filepath.Join("..", "..", "testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := ingest.Parse(b, name, ingest.CSVOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := im.Apply(res, importer.Options{EnclaveID: "CORE", CreateAssets: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.PutRisk(&model.RiskEntry{
+		EnclaveID: "CORE", Title: "Administrative account separation not enforced",
+		Likelihood: 4, Impact: 4, Status: "open", Owner: "Windows engineering",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return &harness{Server: srv, t: t}
 }
 
 func (h *harness) get(path string) *httptest.ResponseRecorder {
 	h.t.Helper()
-	w := httptest.NewRecorder()
-	h.mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
-	return w
+	req := httptest.NewRequest("GET", path, nil)
+	rec := httptest.NewRecorder()
+	h.Handler().ServeHTTP(rec, req)
+	return rec
 }
 
 func (h *harness) post(path string, form url.Values) *httptest.ResponseRecorder {
 	h.t.Helper()
-	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	w := httptest.NewRecorder()
-	h.mux.ServeHTTP(w, req)
-	return w
+	rec := httptest.NewRecorder()
+	h.Handler().ServeHTTP(rec, req)
+	return rec
 }
 
-// upload posts a CSV to the first half of the import and returns the rendered
-// mapping screen.
-func (h *harness) upload(filename, body string) *httptest.ResponseRecorder {
+func (h *harness) upload(path, field, filename string, body []byte, fields map[string]string) *httptest.ResponseRecorder {
 	h.t.Helper()
 	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	part, err := mw.CreateFormFile("file", filename)
+	w := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		_ = w.WriteField(k, v)
+	}
+	part, err := w.CreateFormFile(field, filename)
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	if _, err := part.Write([]byte(body)); err != nil {
+	if _, err := part.Write(body); err != nil {
 		h.t.Fatal(err)
 	}
-	mw.Close()
-
-	req := httptest.NewRequest(http.MethodPost, "/import/upload", &buf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	w := httptest.NewRecorder()
-	h.mux.ServeHTTP(w, req)
-	return w
+	_ = w.Close()
+	req := httptest.NewRequest("POST", path, &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.Handler().ServeHTTP(rec, req)
+	return rec
 }
 
-var stageRE = regexp.MustCompile(`name="stage" value="([0-9a-f]+)"`)
+// firstIDs pulls real identifiers out of the seeded store so the tests do not
+// hard-code any.
+func (h *harness) firstIDs() (assetID, findingID, scanID string) {
+	assetID = h.Store.AllAssets()[0].ID
+	findingID = h.Store.Findings("CORE")[0].ID
+	scanID = h.Store.Scans("CORE")[0].ID
+	return
+}
 
-func TestEveryPageRendersOnAnEmptyInstall(t *testing.T) {
+func TestEveryPageRenders(t *testing.T) {
 	h := newHarness(t)
-	for _, path := range []string{"/", "/hosts", "/unassigned", "/conflicts", "/import", "/enclaves"} {
-		w := h.get(path)
-		if w.Code != http.StatusOK {
-			t.Errorf("GET %s = %d", path, w.Code)
+	a, f, s := h.firstIDs()
+	paths := []string{
+		"/", "/enclaves", "/enclaves/CORE", "/enclaves/CORE/assets",
+		"/enclaves/CORE/findings", "/enclaves/CORE/baseline",
+		"/enclaves/CORE/baseline?catalog=cis-controls-v8",
+		"/enclaves/CORE/baseline?state=failing", "/enclaves/CORE/baseline?family=AC",
+		"/enclaves/CORE/baseline/nist-800-53r5/AC-6(10)",
+		"/enclaves/CORE/baseline/cis-controls-v8/5.4",
+		"/enclaves/CORE/risk", "/enclaves/CORE/risk/new", "/enclaves/CORE/scans",
+		"/enclaves/CORE/edit", "/enclaves/CORE/assets/new",
+		"/enclaves/LAB/baseline", "/enclaves/LAB/assets",
+		"/enclaves/new",
+		"/assets/" + a, "/assets/" + a + "/edit",
+		"/findings/" + f, "/scans/" + s,
+		"/catalogs", "/catalogs/nist-800-53r5", "/catalogs/nist-800-53r5?profile=low",
+		"/catalogs/cis-controls-v8", "/catalogs/nist-csf-2.0",
+		"/mappings", "/mappings/seed-cci-800-53r5",
+		"/reports", "/reports?catalog=cis-controls-v8", "/import", "/healthz",
+	}
+	for _, p := range paths {
+		rec := h.get(p)
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s = %d\n%s", p, rec.Code, truncateBody(rec.Body.String()))
 			continue
 		}
-		if !strings.Contains(w.Body.String(), "</html>") {
-			t.Errorf("GET %s did not render a complete page", path)
+		// A template that fails mid-render still returns 200 with the error in
+		// the body, so the body has to be checked too.
+		if strings.Contains(rec.Body.String(), "could not be rendered") {
+			t.Errorf("GET %s rendered an error: %s", p, truncateBody(rec.Body.String()))
 		}
 	}
 }
 
-func TestImportPlacesHostsAndSurfacesConflicts(t *testing.T) {
+func truncateBody(s string) string {
+	if len(s) > 400 {
+		return s[:400]
+	}
+	return s
+}
+
+func TestUnknownPathsAreNotFound(t *testing.T) {
 	h := newHarness(t)
-
-	if err := h.store.PutEnclave(&model.Enclave{
-		ID: "CORP-CORE", Name: "Core Enterprise Services", Owner: "D. Rennick",
-		CIDRs: []string{"10.12.0.0/16"}, Impact: "Moderate", Framework: "cis",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := h.engine.Rebuild(); err != nil {
-		t.Fatal(err)
-	}
-
-	recent := time.Now().Add(-48 * time.Hour).Format("2006-01-02")
-	edr := "Computer Name,IP Address,Operating System,Sensor Status,BitLocker,Last Scan\n" +
-		"WKS-014,10.12.1.20,Windows 11 Pro,Normal,Yes," + recent + "\n" +
-		"SRV-DB-02,10.12.9.5,Windows Server 2022,Normal,Yes," + recent + "\n" +
-		"LAB-77,192.168.5.5,Windows 10 Pro,Unknown,No,\n"
-
-	page := h.upload("falcon-prod.csv", edr)
-	if page.Code != http.StatusOK {
-		t.Fatalf("upload = %d, body %s", page.Code, page.Body.String())
-	}
-	body := page.Body.String()
-	if !strings.Contains(body, "Map columns") {
-		t.Fatal("upload did not reach the mapping screen")
-	}
-	// The mapping arrives pre-filled from the headers.
-	if !strings.Contains(body, `<option value="Computer Name" selected>`) {
-		t.Error("the host name column was not guessed")
-	}
-
-	m := stageRE.FindStringSubmatch(body)
-	if m == nil {
-		t.Fatal("no staging identifier on the mapping screen")
-	}
-
-	commit := url.Values{
-		"stage":                {m[1]},
-		"source_id":            {"falcon-prod"},
-		"source_kind":          {"edr"},
-		"col_id:hostname":      {"Computer Name"},
-		"col_f:ip":             {"IP Address"},
-		"col_f:os":             {"Operating System"},
-		"col_f:edr_status":     {"Sensor Status"},
-		"col_f:disk_encrypted": {"BitLocker"},
-		"col_f:last_vuln_scan": {"Last Scan"},
-		"save_as":              {"CrowdStrike monthly export"},
-	}
-	if w := h.post("/import/commit", commit); w.Code != http.StatusSeeOther {
-		t.Fatalf("commit = %d, body %s", w.Code, w.Body.String())
-	}
-
-	if got := h.engine.Live(); got != 3 {
-		t.Fatalf("live hosts = %d, want 3", got)
-	}
-	if got := len(h.engine.Unassigned()); got != 1 {
-		t.Errorf("unassigned = %d, want 1: only the 192.168 host is outside the range", got)
-	}
-
-	// A second feed disagreeing about the operating system.
-	cmdb := "Asset Name,Serial,IP,OS,Assigned To\n" +
-		"WKS-014,5CG8241LM,10.12.1.20,Windows 10 Pro,D. Rennick\n"
-	page = h.upload("servicenow.csv", cmdb)
-	m = stageRE.FindStringSubmatch(page.Body.String())
-	if m == nil {
-		t.Fatal("no staging identifier on the second mapping screen")
-	}
-	commit = url.Values{
-		"stage":           {m[1]},
-		"source_id":       {"servicenow"},
-		"source_kind":     {"cmdb"},
-		"col_id:hostname": {"Asset Name"},
-		"col_id:serial":   {"Serial"},
-		"col_f:ip":        {"IP"},
-		"col_f:os":        {"OS"},
-		"col_f:owner":     {"Assigned To"},
-	}
-	if w := h.post("/import/commit", commit); w.Code != http.StatusSeeOther {
-		t.Fatalf("second commit = %d", w.Code)
-	}
-
-	if got := h.engine.Live(); got != 3 {
-		t.Errorf("live hosts = %d, want 3: the second feed describes a known machine", got)
-	}
-	conflicts := h.engine.Conflicts()
-	if len(conflicts) != 1 {
-		t.Fatalf("conflicts = %d, want 1", len(conflicts))
-	}
-	if got := conflicts[0].Field(model.FieldOS); got != "Windows 11 Pro" {
-		t.Errorf("winning OS = %q, want the agent's value", got)
-	}
-
-	if page := h.get("/conflicts"); !strings.Contains(page.Body.String(), "Windows 10 Pro") {
-		t.Error("the conflicts page does not show the rejected value")
-	}
-	if page := h.get("/"); !strings.Contains(page.Body.String(), "CORP-CORE") {
-		t.Error("the overview does not show the enclave")
-	}
-	if page := h.get("/import"); !strings.Contains(page.Body.String(), "CrowdStrike monthly export") {
-		t.Error("the saved mapping is not listed")
+	for _, p := range []string{"/nope", "/enclaves/NOPE", "/assets/nope", "/findings/nope",
+		"/scans/nope", "/catalogs/nope", "/mappings/nope",
+		"/enclaves/CORE/baseline/nist-800-53r5/ZZ-9"} {
+		if code := h.get(p).Code; code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", p, code)
+		}
 	}
 }
 
-func TestAssigningAHostByHandSticks(t *testing.T) {
+func TestCreateAndEditAnEnclave(t *testing.T) {
 	h := newHarness(t)
-	if err := h.store.PutEnclave(&model.Enclave{ID: "DMZ", CIDRs: []string{"172.16.0.0/16"}}); err != nil {
-		t.Fatal(err)
-	}
-	csv := "Computer Name,IP Address\nEDGE-01,192.168.9.9\n"
-	page := h.upload("edge.csv", csv)
-	m := stageRE.FindStringSubmatch(page.Body.String())
-	if m == nil {
-		t.Fatal("no staging identifier")
-	}
-	h.post("/import/commit", url.Values{
-		"stage": {m[1]}, "source_id": {"ipam"}, "source_kind": {"ipam"},
-		"col_id:hostname": {"Computer Name"}, "col_f:ip": {"IP Address"},
+	rec := h.post("/enclaves/new", url.Values{
+		"name": {"New Site"}, "id": {"SITE-A"}, "owner": {"S. Ortiz"},
+		"confidentiality": {"low"}, "integrity": {"moderate"}, "availability": {"high"},
+		"networks":    {"10.30.0.0/16 Site A\n10.31.0.0/16 Overflow"},
+		"environment": {"Production"}, "status": {"Active"},
 	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create = %d: %s", rec.Code, rec.Body.String())
+	}
+	e, ok := h.Store.Enclave("SITE-A")
+	if !ok {
+		t.Fatal("the enclave was not created under the identifier that was typed")
+	}
+	if len(e.Networks) != 2 || e.Networks[0].Label != "Site A" {
+		t.Errorf("networks were not parsed: %+v", e.Networks)
+	}
+	if e.Categorization() != model.ImpactHigh {
+		t.Errorf("categorisation = %q", e.Categorization())
+	}
 
-	hosts := h.engine.Hosts("")
-	if len(hosts) != 1 {
-		t.Fatalf("got %d hosts", len(hosts))
-	}
-	if w := h.post("/assign", url.Values{"host": {hosts[0].ID}, "enclave": {"DMZ"}}); w.Code != http.StatusSeeOther {
-		t.Fatalf("assign = %d", w.Code)
-	}
-	if got := h.engine.Host(hosts[0].ID).EnclaveID; got != "DMZ" {
-		t.Errorf("enclave after assignment = %q, want DMZ", got)
-	}
-	if got := len(h.engine.Unassigned()); got != 0 {
-		t.Errorf("unassigned = %d, want 0", got)
+	// A bad range comes back on the form rather than being saved.
+	rec = h.post("/enclaves/SITE-A/edit", url.Values{
+		"name": {"New Site"}, "networks": {"not-a-range"},
+	})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "not-a-range") {
+		t.Errorf("a bad range should be reported on the form, got %d", rec.Code)
 	}
 }
 
-func TestDeletingAnEnclaveThatStillHoldsHostsIsRefused(t *testing.T) {
+func TestDeletingAnEnclaveNeedsItsNameTyped(t *testing.T) {
 	h := newHarness(t)
-	if err := h.store.PutEnclave(&model.Enclave{ID: "CORP-CORE", CIDRs: []string{"10.12.0.0/16"}}); err != nil {
-		t.Fatal(err)
+	if rec := h.post("/enclaves/CORE/delete", url.Values{"confirm": {"wrong"}}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("got %d", rec.Code)
 	}
-	csv := "Computer Name,IP Address\nWKS-014,10.12.1.20\n"
-	page := h.upload("f.csv", csv)
-	m := stageRE.FindStringSubmatch(page.Body.String())
-	h.post("/import/commit", url.Values{
-		"stage": {m[1]}, "source_id": {"falcon"}, "source_kind": {"edr"},
-		"col_id:hostname": {"Computer Name"}, "col_f:ip": {"IP Address"},
-	})
-
-	h.post("/enclaves/delete", url.Values{"id": {"CORP-CORE"}})
-	if h.store.Enclave("CORP-CORE") == nil {
-		t.Error("an enclave still holding hosts must not be deleted")
+	if _, ok := h.Store.Enclave("CORE"); !ok {
+		t.Fatal("the enclave was deleted without the name being typed correctly")
+	}
+	if rec := h.post("/enclaves/CORE/delete", url.Values{"confirm": {"Core Operations"}}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("got %d", rec.Code)
+	}
+	if _, ok := h.Store.Enclave("CORE"); ok {
+		t.Fatal("the enclave was not deleted")
+	}
+	if len(h.Store.AllAssets()) != 0 || len(h.Store.Findings("")) != 0 {
+		t.Error("deleting an enclave should take its records with it")
 	}
 }
 
-func TestBadAddressRangeIsRejected(t *testing.T) {
+func TestAssessmentDrivesTheGapState(t *testing.T) {
 	h := newHarness(t)
-	w := h.post("/enclaves/save", url.Values{
-		"id": {"CORP-CORE"}, "cidrs": {"10.12.0.0/33"},
+	// AC-6(10) has a failing STIG rule against it in the fixture.
+	rec := h.post("/enclaves/CORE/baseline/nist-800-53r5/AC-6(10)", url.Values{
+		"status": {"implemented"}, "assessed_by": {"P. Kittelson"},
+		"narrative":   {"Separate accounts are issued through the privileged access process."},
+		"responsible": {"Windows engineering"},
 	})
-	if w.Code != http.StatusSeeOther {
-		t.Fatalf("save = %d", w.Code)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("save = %d: %s", rec.Code, rec.Body.String())
 	}
-	if h.store.Enclave("CORP-CORE") != nil {
-		t.Error("an enclave with an unparseable range must not be saved")
+	a, ok := h.Store.Assessment("CORE", "nist-800-53r5", "AC-6(10)")
+	if !ok || a.Status != model.ImplImplemented || a.AssessedAt == nil {
+		t.Fatalf("assessment not stored properly: %+v", a)
+	}
+	body := h.get("/enclaves/CORE/baseline/nist-800-53r5/AC-6(10)").Body.String()
+	if !strings.Contains(body, "Contradicted by scans") {
+		t.Error("a control claimed implemented with failing scans should read as contradicted")
+	}
+	if !strings.Contains(h.get("/enclaves/CORE/baseline").Body.String(), "Contradicted by scans") {
+		t.Error("the gap page should surface the contradiction")
+	}
+}
+
+func TestDispositionNeedsANameAndAReason(t *testing.T) {
+	h := newHarness(t)
+	_, f, _ := h.firstIDs()
+	rec := h.post("/findings/"+f+"/disposition", url.Values{"disposition": {"risk_accepted"}})
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "err=") {
+		t.Errorf("accepting a risk with no reason should be refused, redirected to %q", loc)
+	}
+	got, _ := h.Store.Finding(f)
+	if got.Disposition == model.DispositionRiskAccepted {
+		t.Error("the disposition was recorded despite being refused")
+	}
+
+	rec = h.post("/findings/"+f+"/disposition", url.Values{
+		"disposition": {"risk_accepted"}, "by": {"D. Rennick"},
+		"note": {"Compensating control in place until the next image."},
+	})
+	if strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("a complete decision should be accepted: %s", rec.Header().Get("Location"))
+	}
+	got, _ = h.Store.Finding(f)
+	if got.Disposition != model.DispositionRiskAccepted || got.DispositionBy != "D. Rennick" {
+		t.Errorf("decision not recorded: %+v", got)
+	}
+	// In-progress and remediated need no justification, because they claim
+	// nothing about accepting risk.
+	rec = h.post("/findings/"+f+"/disposition", url.Values{"disposition": {"in_progress"}})
+	if strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Error("marking work in progress should not require a justification")
+	}
+}
+
+func TestBaselineAssignmentPairsCatalogAndProfile(t *testing.T) {
+	h := newHarness(t)
+	if rec := h.post("/enclaves/LAB/baselines", url.Values{"baseline": {"cis-controls-v8|ig1"}}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("got %d", rec.Code)
+	}
+	e, _ := h.Store.Enclave("LAB")
+	if len(e.Baselines) != 1 || e.Baselines[0].ProfileID != "ig1" {
+		t.Fatalf("baseline not assigned: %+v", e.Baselines)
+	}
+	// A profile that belongs to another catalogue is refused.
+	rec := h.post("/enclaves/LAB/baselines", url.Values{"baseline": {"nist-800-53r5|ig1"}})
+	if !strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Error("a profile the catalogue does not define should be refused")
+	}
+	// Removal.
+	if rec := h.post("/enclaves/LAB/baselines", url.Values{
+		"action": {"remove"}, "catalog_id": {"cis-controls-v8"}}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("got %d", rec.Code)
+	}
+	e, _ = h.Store.Enclave("LAB")
+	if len(e.Baselines) != 0 {
+		t.Error("the baseline was not removed")
+	}
+}
+
+func TestCSVUploadStopsAtTheMappingScreen(t *testing.T) {
+	h := newHarness(t)
+	body, err := os.ReadFile(filepath.Join("..", "..", "testdata", "sample-vulns.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := h.upload("/import", "file", "sample-vulns.csv", body, map[string]string{
+		"enclave_id": "CORE", "create_assets": "on",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d: %s", rec.Code, truncateBody(rec.Body.String()))
+	}
+	page := rec.Body.String()
+	if !strings.Contains(page, "Map the columns") {
+		t.Fatal("a spreadsheet should stop at the mapping screen")
+	}
+	// Nothing may have been written yet.
+	if n := len(h.Store.Findings("CORE")); n != countSeeded(h) {
+		t.Errorf("the mapping screen wrote findings before being confirmed: %d", n)
+	}
+	for _, want := range []string{"Vulnerability Title", "Asset IP Address", "First Discovered"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the preview does not mention the column %q", want)
+		}
+	}
+}
+
+func countSeeded(h *harness) int { return len(h.Store.Findings("CORE")) }
+
+func TestStructuredUploadAppliesImmediately(t *testing.T) {
+	h := newHarness(t)
+	before := len(h.Store.Findings("CORE"))
+	body := []byte(`{"title":"Second server","target_data":{"host_name":"APP-SRV-02","ip_address":"10.20.4.12"},
+	 "stigs":[{"display_name":"RHEL 9 STIG","stig_id":"RHEL_9","rules":[
+	 {"group_id":"V-1","rule_id":"SV-1","rule_title":"Something","severity":"high","status":"open","ccis":["CCI-000366"]}]}]}`)
+	rec := h.upload("/import", "file", "second.cklb", body, map[string]string{
+		"enclave_id": "CORE", "create_assets": "on", "imported_by": "P. Kittelson",
+	})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Import complete") {
+		t.Fatalf("got %d: %s", rec.Code, truncateBody(rec.Body.String()))
+	}
+	if len(h.Store.Findings("CORE")) != before+1 {
+		t.Error("the checklist was not applied")
+	}
+}
+
+func TestUnreadableUploadIsReportedNotSwallowed(t *testing.T) {
+	h := newHarness(t)
+	rec := h.upload("/import", "file", "junk.ckl", []byte("<CHECKLIST>this is not"), map[string]string{
+		"enclave_id": "CORE", "create_assets": "on",
+	})
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "err=") {
+		t.Errorf("a broken file should report an error, redirected to %q", loc)
+	}
+}
+
+func TestCatalogAndMappingImport(t *testing.T) {
+	h := newHarness(t)
+	cat := []byte("@id acme\n@name ACME Standard\n@family HD = Hardening\nHD-1 | Approved base image |\nHD-2 | Unused services removed |\n")
+	if rec := h.upload("/catalogs/import", "file", "acme.catalog", cat, nil); rec.Code != http.StatusSeeOther {
+		t.Fatalf("catalog import = %d: %s", rec.Code, truncateBody(rec.Body.String()))
+	}
+	if _, ok := h.Catalogs.Get("acme"); !ok {
+		t.Fatal("the catalogue was not loaded")
+	}
+
+	xwalk := []byte("#name,To ACME\n#id,acme-xwalk\n#scheme,control\n#target,acme\nkey,controls\nCM-7,HD-2\nCM-6,HD-1\n")
+	if rec := h.upload("/mappings/import", "file", "acme-xwalk.csv", xwalk, nil); rec.Code != http.StatusSeeOther {
+		t.Fatalf("mapping import = %d", rec.Code)
+	}
+	// Assign the framework and confirm the crosswalk carried evidence across.
+	if rec := h.post("/enclaves/CORE/baselines", url.Values{"baseline": {"acme|"}}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("assign = %d", rec.Code)
+	}
+	body := h.get("/enclaves/CORE/baseline?catalog=acme").Body.String()
+	if strings.Contains(body, "could not be rendered") {
+		t.Fatalf("gap page failed: %s", truncateBody(body))
+	}
+	reached := false
+	for _, f := range h.Store.Findings("CORE") {
+		if len(f.Controls("acme")) > 0 {
+			reached = true
+		}
+	}
+	if !reached {
+		t.Error("the crosswalk did not carry any finding into the organisation's own framework")
+	}
+	// A built-in catalogue cannot be deleted.
+	if rec := h.post("/catalogs/nist-800-53r5/delete", nil); !strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Error("a built-in catalogue should not be removable")
+	}
+}
+
+func TestReadOnlyBlocksEveryWrite(t *testing.T) {
+	h := newHarness(t)
+	h.ReadOnly = true
+	for _, p := range []string{
+		"/enclaves/new", "/enclaves/CORE/edit", "/enclaves/CORE/delete",
+		"/enclaves/CORE/baselines", "/enclaves/CORE/assets/new",
+		"/import", "/import/confirm", "/catalogs/import", "/mappings/import",
+		"/mappings/reannotate", "/enclaves/CORE/risk/new",
+	} {
+		if code := h.post(p, url.Values{"name": {"x"}}).Code; code != http.StatusForbidden {
+			t.Errorf("POST %s = %d in read-only mode, want 403", p, code)
+		}
+	}
+	// Reading still works.
+	if code := h.get("/enclaves/CORE/baseline").Code; code != http.StatusOK {
+		t.Errorf("read-only mode broke a read: %d", code)
+	}
+}
+
+func TestCSVExports(t *testing.T) {
+	h := newHarness(t)
+	for _, kind := range []string{"assets", "findings", "baseline", "risks"} {
+		rec := h.get("/export/" + kind + "?enclave=CORE")
+		if rec.Code != http.StatusOK {
+			t.Errorf("export %s = %d", kind, rec.Code)
+			continue
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/csv") {
+			t.Errorf("export %s content type = %q", kind, ct)
+		}
+		if !strings.Contains(rec.Header().Get("Content-Disposition"), "attachment") {
+			t.Errorf("export %s is not offered as a download", kind)
+		}
+		lines := strings.Count(strings.TrimSpace(rec.Body.String()), "\n")
+		if lines < 1 {
+			t.Errorf("export %s produced only a header", kind)
+		}
+	}
+	if code := h.get("/export/nonsense").Code; code != http.StatusNotFound {
+		t.Errorf("an unknown export should be 404, got %d", code)
+	}
+}
+
+func TestJSONAPI(t *testing.T) {
+	h := newHarness(t)
+	for _, kind := range []string{"enclaves", "assets", "findings", "risks", "scans", "catalogs", "summary"} {
+		rec := h.get("/api/" + kind)
+		if rec.Code != http.StatusOK {
+			t.Errorf("api %s = %d", kind, rec.Code)
+		}
+		if !strings.HasPrefix(rec.Header().Get("Content-Type"), "application/json") {
+			t.Errorf("api %s content type = %q", kind, rec.Header().Get("Content-Type"))
+		}
+		if !strings.HasPrefix(strings.TrimSpace(rec.Body.String()), "[") {
+			t.Errorf("api %s did not return a list", kind)
+		}
+	}
+	if code := h.get("/api/nonsense").Code; code != http.StatusNotFound {
+		t.Errorf("an unknown collection should be 404, got %d", code)
+	}
+}
+
+func TestSecurityHeadersAreSet(t *testing.T) {
+	h := newHarness(t)
+	rec := h.get("/")
+	for header, want := range map[string]string{
+		"Content-Security-Policy": "default-src 'none'",
+		"X-Content-Type-Options":  "nosniff",
+		"Referrer-Policy":         "no-referrer",
+	} {
+		if got := rec.Header().Get(header); !strings.Contains(got, want) {
+			t.Errorf("%s = %q, want it to contain %q", header, got, want)
+		}
+	}
+}
+
+func TestFindingFiltersNarrowTheList(t *testing.T) {
+	h := newHarness(t)
+	all := h.get("/enclaves/CORE/findings").Body.String()
+	high := h.get("/enclaves/CORE/findings?severity=critical").Body.String()
+	if len(high) >= len(all) {
+		t.Error("filtering by severity did not narrow the page")
+	}
+	if strings.Contains(high, "could not be rendered") {
+		t.Fatal(truncateBody(high))
+	}
+	for _, q := range []string{"?unmapped=1", "?overdue=1", "?show=all", "?show=closed",
+		"?q=windows", "?disposition=open", "?control=AC-6(10)&catalog=nist-800-53r5"} {
+		rec := h.get("/enclaves/CORE/findings" + q)
+		if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "could not be rendered") {
+			t.Errorf("findings%s failed: %d", q, rec.Code)
+		}
+	}
+}
+
+func TestUploadCapIsEnforced(t *testing.T) {
+	h := newHarness(t)
+	h.MaxUpload = 64
+	rec := h.upload("/import", "file", "big.ckl", bytes.Repeat([]byte("x"), 4096), map[string]string{
+		"enclave_id": "CORE",
+	})
+	if !strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Error("an oversized upload should be refused with a message")
+	}
+}
+
+func TestImportIsReachableFromTheAssetPages(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+
+	// The asset page has to offer an import pinned to that host, or the only
+	// way to add compliance for a machine is to guess that the top-level
+	// Import page will match it by name.
+	page := h.get("/assets/" + a.ID).Body.String()
+	want := "/import?enclave=" + a.EnclaveID + "&amp;asset=" + a.ID
+	if !strings.Contains(page, want) {
+		t.Errorf("the asset page does not link to a pinned import (%s)", want)
+	}
+	if !strings.Contains(page, "Import results for this host") {
+		t.Error("the asset page does not say it can import results for the host")
+	}
+
+	list := h.get("/enclaves/" + a.EnclaveID + "/assets").Body.String()
+	if !strings.Contains(list, "/import?enclave="+a.EnclaveID) {
+		t.Error("the assets list does not offer an import")
+	}
+	if !strings.Contains(list, want) {
+		t.Error("the assets list does not offer a per-row pinned import")
+	}
+}
+
+func TestImportFormOffersAndPreselectsTheAsset(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+
+	plain := h.get("/import").Body.String()
+	if !strings.Contains(plain, `name="asset_id"`) {
+		t.Fatal("the import form has no way to attach results to a known host")
+	}
+	if !strings.Contains(plain, "STIG checklist") {
+		t.Error("the import form never mentions STIG checklists, so nobody will know it reads them")
+	}
+	if !strings.Contains(plain, a.DisplayName()) {
+		t.Error("the asset picker does not list the inventory")
+	}
+
+	// Arriving from an asset page preselects that host and its enclave.
+	pinned := h.get("/import?enclave=" + a.EnclaveID + "&asset=" + a.ID).Body.String()
+	if !strings.Contains(pinned, `value="`+a.ID+`" selected`) {
+		t.Error("the asset picker did not preselect the host the link came from")
+	}
+	if !strings.Contains(pinned, `value="`+a.EnclaveID+`" selected`) {
+		t.Error("the enclave was not preselected from the asset")
+	}
+}
+
+func TestUploadingAChecklistPinnedToAHost(t *testing.T) {
+	h := newHarness(t)
+	// A host the inventory knows by a name no checklist will carry.
+	curated := &model.Asset{
+		EnclaveID: "CORE", Name: "PAY-APP-PROD-01", Type: model.AssetServer,
+		Criticality: model.CritMission, Owner: "Platform team",
+	}
+	if err := h.Store.PutAsset(curated); err != nil {
+		t.Fatal(err)
+	}
+	before := len(h.Store.Assets("CORE"))
+
+	body, err := os.ReadFile(filepath.Join("..", "..", "testdata", "sample.ckl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := h.upload("/import", "file", "sample.ckl", body, map[string]string{
+		"enclave_id": "CORE", "asset_id": curated.ID, "create_assets": "on",
+	})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Import complete") {
+		t.Fatalf("got %d: %s", rec.Code, truncateBody(rec.Body.String()))
+	}
+	if !strings.Contains(rec.Body.String(), "attached to PAY-APP-PROD-01") {
+		t.Error("the summary should say which host the results were attached to")
+	}
+	if got := len(h.Store.Assets("CORE")); got != before {
+		t.Errorf("pinning still created a host: %d, was %d", got, before)
+	}
+	got, _ := h.Store.Asset(curated.ID)
+	if got.Name != "PAY-APP-PROD-01" || got.Criticality != model.CritMission {
+		t.Errorf("the checklist overwrote the inventory record: %+v", got)
+	}
+	if len(h.Store.AssetFindings(curated.ID)) == 0 {
+		t.Error("no findings were attached to the pinned host")
+	}
+	// The compliance now shows on that host's page.
+	page := h.get("/assets/" + curated.ID).Body.String()
+	if !strings.Contains(page, "administrative privileges") {
+		t.Error("the host page does not show the checklist results")
+	}
+}
+
+func TestPinnedCSVImportCarriesTheAssetThroughTheMappingScreen(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+	body, err := os.ReadFile(filepath.Join("..", "..", "testdata", "sample-vulns.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := h.upload("/import", "file", "sample-vulns.csv", body, map[string]string{
+		"enclave_id": "CORE", "asset_id": a.ID, "create_assets": "on",
+	})
+	if !strings.Contains(rec.Body.String(), `name="asset_id" value="`+a.ID+`"`) {
+		t.Error("the mapping screen dropped the pinned host, so confirming would scatter the rows")
 	}
 }

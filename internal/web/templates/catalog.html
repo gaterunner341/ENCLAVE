@@ -1,0 +1,48 @@
+{{template "head" .}}
+{{$d := .Data}}{{$c := $d.Catalog}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs"><a href="/catalogs">Control baselines</a></div>
+    <h1>{{$c.Name}}</h1>
+    {{if $c.Description}}<p class="lede">{{$c.Description}}</p>{{end}}
+    <div class="pill-row" style="margin-top: .4rem">
+      {{if $c.Version}}<span class="badge plain">{{$c.Version}}</span>{{end}}
+      {{if $c.Publisher}}<span class="badge plain">{{$c.Publisher}}</span>{{end}}
+      <span class="badge plain">{{comma $d.Count}} controls in view</span>
+    </div>
+  </div>
+  {{if $c.Profiles}}
+  <div>
+    <select onchange="location = this.value" class="btn" style="width: auto">
+      <option value="/catalogs/{{$c.ID}}" {{if eq $d.Profile ""}}selected{{end}}>All controls ({{len $c.Controls}})</option>
+      {{range $c.Profiles}}<option value="/catalogs/{{$c.ID}}?profile={{.ID}}"
+        {{if eq .ID $d.Profile}}selected{{end}}>{{.Name}} ({{$c.Count .ID}})</option>{{end}}
+    </select>
+  </div>
+  {{end}}
+</div>
+
+{{if $c.Source}}<p style="color: var(--text-3); font-size: .82rem">Source: {{$c.Source}}</p>{{end}}
+
+<div class="card">
+  <header><h3>Controls</h3><span class="spacer"></span>
+    <input type="search" data-filters="catalog-table" placeholder="filter by identifier or title" style="width: 260px"></header>
+  <div class="table-wrap">
+    <table id="catalog-table">
+      <thead><tr><th style="width: 120px">Control</th><th>Title</th><th>Family</th><th>Profiles</th></tr></thead>
+      <tbody>
+      {{range $d.Families}}{{$fam := .}}
+      {{range .Controls}}
+      <tr>
+        <td class="mono">{{.ID}}</td>
+        <td class="wrap">{{.Title}}{{if .Statement}}<div style="color: var(--text-3); font-size: .78rem">{{truncate 160 .Statement}}</div>{{end}}</td>
+        <td style="font-size: .8rem">{{$fam.ID}} {{$fam.Name}}</td>
+        <td style="font-size: .76rem">{{join ", " .Profiles}}</td>
+      </tr>
+      {{end}}
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{template "foot" .}}

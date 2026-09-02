@@ -1,0 +1,39 @@
+{{template "head" .}}
+{{$d := .Data}}{{$s := $d.Set}}{{$c := $d.Catalog}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs"><a href="/mappings">Control mappings</a></div>
+    <h1>{{$s.Name}}</h1>
+    {{if $s.Note}}<p class="lede">{{$s.Note}}</p>{{end}}
+    <div class="pill-row" style="margin-top: .4rem">
+      <span class="badge plain">{{$s.Scheme.Label}}</span>
+      <span class="badge plain">{{comma $s.Size}} entries</span>
+      <span class="badge plain">targets {{$c.Name}}</span>
+      {{if $s.BuiltIn}}<span class="badge plain">ships with ENCLAVE</span>{{end}}
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <header><h3>Entries</h3><span class="spacer"></span>
+    <input type="search" data-filters="mapping-table" placeholder="filter" style="width: 220px"></header>
+  <div class="table-wrap">
+    <table id="mapping-table">
+      <thead><tr><th style="width: 180px">Key</th><th style="width: 140px">Controls</th><th>Title</th></tr></thead>
+      <tbody>
+      {{range $d.Keys}}{{$k := .}}
+      <tr>
+        <td class="mono">{{$k}}</td>
+        <td class="mono">{{join ", " (index $s.Entries $k)}}</td>
+        <td class="wrap" style="color: var(--text-2)">
+          {{range index $s.Entries $k}}{{$ctl := controlOf $c .}}{{if $ctl.Title}}{{$ctl.Title}}{{else}}<span style="color: var(--text-3)">not in {{$c.Name}}</span>{{end}} {{end}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{if $d.Truncated}}
+  <div class="table-note">Showing the first {{len $d.Keys}} of {{comma $d.Total}} entries.</div>
+  {{end}}
+</div>
+{{template "foot" .}}

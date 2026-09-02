@@ -1,0 +1,131 @@
+{{template "head" .}}
+{{$d := .Data}}{{$e := .Enclave}}{{$an := $d.Analysis}}{{$cat := $d.Catalog}}
+<div class="page-head">
+  <div class="grow">
+    <h1>{{$cat.Name}}</h1>
+    <p class="lede">{{$cat.ProfileName $d.Profile}} measured against {{$e.Name}}.
+      A control is satisfied only when somebody has claimed it is implemented and no scan result
+      contradicts them.</p>
+  </div>
+  <div>
+    <a class="btn" href="/export/baseline?enclave={{$e.ID}}&catalog={{$cat.ID}}">Export</a>
+    {{if gt (len $e.Baselines) 1}}
+    <select onchange="location = this.value" class="btn" style="width: auto">
+      {{range $e.Baselines}}<option value="/enclaves/{{$e.ID}}/baseline?catalog={{.CatalogID}}"
+        {{if eq .CatalogID $cat.ID}}selected{{end}}>{{.CatalogID}}</option>{{end}}
+    </select>
+    {{end}}
+  </div>
+</div>
+
+<div class="grid four" style="margin-bottom: 1.25rem">
+  <div class="stat"><div class="label">Controls in scope</div><div class="value">{{comma $an.Total}}</div></div>
+  <div class="stat"><div class="label">Coverage</div><div class="value">{{pct $an.Coverage}}</div>
+    <div class="note">claimed or verified</div></div>
+  <div class="stat"><div class="label">Verified by evidence</div><div class="value">{{pct $an.Verified}}</div>
+    <div class="note">claimed and passing scans</div></div>
+  <div class="stat"><div class="label">Open gaps</div><div class="value">{{comma $an.OpenCount}}</div>
+    <div class="note">{{countState $an.Counts "contradicted"}} contradicted by scans</div></div>
+</div>
+
+<div class="split">
+  <div>
+    {{if $d.Worst}}
+    <div class="card">
+      <header><h2>Where to look first</h2><span class="spacer"></span>
+        <span style="color: var(--text-3); font-size: .8rem">ordered by state, then weighted risk</span></header>
+      <div class="table-wrap"><table>
+        <thead><tr><th>State</th><th>Control</th><th>Title</th>
+          <th class="num">Open findings</th><th class="num">Assets</th><th class="num">Risk</th></tr></thead>
+        <tbody>{{range $d.Worst}}
+        <tr>
+          <td><span class="badge {{stateClass .State}}">{{.State.Label}}</span></td>
+          <td class="mono"><a href="/enclaves/{{$e.ID}}/baseline/{{$cat.ID}}/{{.Control.ID}}">{{.Control.ID}}</a></td>
+          <td class="wrap">{{.Control.Title}}</td>
+          <td class="num">{{.OpenCount}}</td>
+          <td class="num">{{.Assets}}</td>
+          <td class="num">{{num .RiskScore}}</td>
+        </tr>
+        {{end}}</tbody>
+      </table></div>
+    </div>
+    {{end}}
+
+    <div class="card">
+      <header><h2>Families</h2><span class="spacer"></span>
+        {{if or $d.State $d.Family}}<a class="btn small" href="/enclaves/{{$e.ID}}/baseline?catalog={{$cat.ID}}">Clear filter</a>{{end}}
+      </header>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Family</th><th style="width: 200px">State mix</th>
+          <th class="num">Controls</th><th class="num">Open</th><th class="num">Coverage</th></tr></thead>
+        <tbody>{{range $an.Families}}
+        <tr>
+          <td><a href="/enclaves/{{$e.ID}}/baseline?catalog={{$cat.ID}}&family={{.ID}}"><strong>{{.ID}}</strong> {{.Name}}</a></td>
+          <td>{{template "gapbar" dict "Counts" .Counts "Total" .Total}}</td>
+          <td class="num">{{.Total}}</td>
+          <td class="num">{{.OpenCount}}</td>
+          <td class="num">{{pct .Coverage}}</td>
+        </tr>
+        {{end}}</tbody>
+      </table></div>
+    </div>
+
+    {{range $d.Families}}
+    <div class="card">
+      <header><h3>{{.ID}} — {{.Name}}</h3><span class="spacer"></span>
+        <span class="badge plain">{{.Total}} controls</span></header>
+      <div class="table-wrap"><table>
+        <thead><tr><th style="width: 110px">Control</th><th>Title</th><th>State</th>
+          <th>Implementation</th><th class="num">Findings</th><th class="num">Assets</th></tr></thead>
+        <tbody>{{range .Controls}}
+        <tr>
+          <td class="mono"><a href="/enclaves/{{$e.ID}}/baseline/{{$cat.ID}}/{{.Control.ID}}">{{.Control.ID}}</a></td>
+          <td class="wrap">{{.Control.Title}}</td>
+          <td><span class="badge {{stateClass .State}}">{{.State.Label}}</span></td>
+          <td style="font-size: .8rem">{{if .Assessment}}{{.Assessment.Status.Label}}
+            {{if .Assessment.Responsible}}<div style="color: var(--text-3); font-size: .76rem">{{.Assessment.Responsible}}</div>{{end}}
+            {{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
+          <td class="num">{{if .OpenCount}}<span class="badge {{severityClass .Worst}}">{{.OpenCount}}</span>{{else if .PassCount}}<span style="color: var(--text-3)">{{.PassCount}} pass</span>{{else}}—{{end}}</td>
+          <td class="num">{{if .Assets}}{{.Assets}}{{else}}—{{end}}</td>
+        </tr>
+        {{end}}</tbody>
+      </table></div>
+    </div>
+    {{end}}
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>Control states</h3></header>
+      <div class="card-body">{{template "donut" dict "D" $d.States "T" "Control states"}}</div>
+    </div>
+
+    <div class="card">
+      <header><h3>Filter by state</h3></header>
+      <div class="table-wrap"><table><tbody>
+        {{range gapStates}}
+        <tr>
+          <td><a href="/enclaves/{{$e.ID}}/baseline?catalog={{$cat.ID}}&state={{.}}">
+            <span class="badge {{stateClass .}}">{{.Label}}</span></a></td>
+          <td class="num">{{index $an.Counts .}}</td>
+        </tr>
+        {{end}}
+      </tbody></table></div>
+      <div class="table-note">
+        <strong>Contradicted</strong> means somebody recorded the control as implemented while
+        scans against it are failing. It is the state worth reading first, because no document
+        review would find it.
+      </div>
+    </div>
+
+    {{if $an.UnmappedFindings}}
+    <div class="notice warn">
+      {{comma $an.UnmappedFindings}} open findings reached no control in this catalogue, so they
+      are not counted anywhere above. Load a fuller mapping table to bring them in.
+      <div style="margin-top: .5rem"><a class="btn small" href="/mappings">Mappings</a>
+      <a class="btn small" href="/enclaves/{{$e.ID}}/findings?unmapped=1">See them</a></div>
+    </div>
+    {{end}}
+  </div>
+</div>
+{{template "foot" .}}

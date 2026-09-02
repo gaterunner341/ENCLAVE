@@ -1,0 +1,203 @@
+# CIS Critical Security Controls version 8 — 18 controls and their safeguards,
+# with the three Implementation Groups as profiles.
+
+@id cis-controls-v8
+@name CIS Critical Security Controls v8
+@version 8.0
+@publisher Center for Internet Security
+@description Prioritised safeguards for cyber defence, grouped into Implementation Groups IG1, IG2 and IG3.
+@source https://www.cisecurity.org/controls
+
+@profile ig1 = Implementation Group 1 | Essential cyber hygiene. The safeguards every enterprise should implement.
+@profile ig2 = Implementation Group 2 | IG1 plus safeguards for enterprises with dedicated security staff.
+@profile ig3 = Implementation Group 3 | IG2 plus safeguards for enterprises with security experts across specialities.
+
+@family 1 = Inventory and Control of Enterprise Assets
+@family 2 = Inventory and Control of Software Assets
+@family 3 = Data Protection
+@family 4 = Secure Configuration of Enterprise Assets and Software
+@family 5 = Account Management
+@family 6 = Access Control Management
+@family 7 = Continuous Vulnerability Management
+@family 8 = Audit Log Management
+@family 9 = Email and Web Browser Protections
+@family 10 = Malware Defenses
+@family 11 = Data Recovery
+@family 12 = Network Infrastructure Management
+@family 13 = Network Monitoring and Defense
+@family 14 = Security Awareness and Skills Training
+@family 15 = Service Provider Management
+@family 16 = Application Software Security
+@family 17 = Incident Response Management
+@family 18 = Penetration Testing
+
+1.1 | Establish and Maintain Detailed Enterprise Asset Inventory | ig1,ig2,ig3
+1.2 | Address Unauthorized Assets | ig1,ig2,ig3
+1.3 | Utilize an Active Discovery Tool | ig2,ig3
+1.4 | Use Dynamic Host Configuration Protocol (DHCP) Logging to Update Enterprise Asset Inventory | ig2,ig3
+1.5 | Use a Passive Asset Discovery Tool | ig3
+
+2.1 | Establish and Maintain a Software Inventory | ig1,ig2,ig3
+2.2 | Ensure Authorized Software is Currently Supported | ig1,ig2,ig3
+2.3 | Address Unauthorized Software | ig1,ig2,ig3
+2.4 | Utilize Automated Software Inventory Tools | ig2,ig3
+2.5 | Allowlist Authorized Software | ig2,ig3
+2.6 | Allowlist Authorized Libraries | ig2,ig3
+2.7 | Allowlist Authorized Scripts | ig3
+
+3.1 | Establish and Maintain a Data Management Process | ig1,ig2,ig3
+3.2 | Establish and Maintain a Data Inventory | ig1,ig2,ig3
+3.3 | Configure Data Access Control Lists | ig1,ig2,ig3
+3.4 | Enforce Data Retention | ig1,ig2,ig3
+3.5 | Securely Dispose of Data | ig1,ig2,ig3
+3.6 | Encrypt Data on End-User Devices | ig1,ig2,ig3
+3.7 | Establish and Maintain a Data Classification Scheme | ig2,ig3
+3.8 | Document Data Flows | ig2,ig3
+3.9 | Encrypt Data on Removable Media | ig2,ig3
+3.10 | Encrypt Sensitive Data in Transit | ig2,ig3
+3.11 | Encrypt Sensitive Data at Rest | ig2,ig3
+3.12 | Segment Data Processing and Storage Based on Sensitivity | ig2,ig3
+3.13 | Deploy a Data Loss Prevention Solution | ig3
+3.14 | Log Sensitive Data Access | ig3
+
+4.1 | Establish and Maintain a Secure Configuration Process | ig1,ig2,ig3
+4.2 | Establish and Maintain a Secure Configuration Process for Network Infrastructure | ig1,ig2,ig3
+4.3 | Configure Automatic Session Locking on Enterprise Assets | ig1,ig2,ig3
+4.4 | Implement and Manage a Firewall on Servers | ig1,ig2,ig3
+4.5 | Implement and Manage a Firewall on End-User Devices | ig1,ig2,ig3
+4.6 | Securely Manage Enterprise Assets and Software | ig1,ig2,ig3
+4.7 | Manage Default Accounts on Enterprise Assets and Software | ig1,ig2,ig3
+4.8 | Uninstall or Disable Unnecessary Services on Enterprise Assets and Software | ig2,ig3
+4.9 | Configure Trusted DNS Servers on Enterprise Assets | ig2,ig3
+4.10 | Enforce Automatic Device Lockout on Portable End-User Devices | ig2,ig3
+4.11 | Enforce Remote Wipe Capability on Portable End-User Devices | ig2,ig3
+4.12 | Separate Enterprise Workspaces on Mobile End-User Devices | ig3
+
+5.1 | Establish and Maintain an Inventory of Accounts | ig1,ig2,ig3
+5.2 | Use Unique Passwords | ig1,ig2,ig3
+5.3 | Disable Dormant Accounts | ig1,ig2,ig3
+5.4 | Restrict Administrator Privileges to Dedicated Administrator Accounts | ig1,ig2,ig3
+5.5 | Establish and Maintain an Inventory of Service Accounts | ig2,ig3
+5.6 | Centralize Account Management | ig2,ig3
+
+6.1 | Establish an Access Granting Process | ig1,ig2,ig3
+6.2 | Establish an Access Revoking Process | ig1,ig2,ig3
+6.3 | Require MFA for Externally-Exposed Applications | ig1,ig2,ig3
+6.4 | Require MFA for Remote Network Access | ig1,ig2,ig3
+6.5 | Require MFA for Administrative Access | ig1,ig2,ig3
+6.6 | Establish and Maintain an Inventory of Authentication and Authorization Systems | ig2,ig3
+6.7 | Centralize Access Control | ig2,ig3
+6.8 | Define and Maintain Role-Based Access Control | ig3
+
+7.1 | Establish and Maintain a Vulnerability Management Process | ig1,ig2,ig3
+7.2 | Establish and Maintain a Remediation Process | ig1,ig2,ig3
+7.3 | Perform Automated Operating System Patch Management | ig1,ig2,ig3
+7.4 | Perform Automated Application Patch Management | ig1,ig2,ig3
+7.5 | Perform Automated Vulnerability Scans of Internal Enterprise Assets | ig2,ig3
+7.6 | Perform Automated Vulnerability Scans of Externally-Exposed Enterprise Assets | ig2,ig3
+7.7 | Remediate Detected Vulnerabilities | ig2,ig3
+
+8.1 | Establish and Maintain an Audit Log Management Process | ig1,ig2,ig3
+8.2 | Collect Audit Logs | ig1,ig2,ig3
+8.3 | Ensure Adequate Audit Log Storage | ig1,ig2,ig3
+8.4 | Standardize Time Synchronization | ig2,ig3
+8.5 | Collect Detailed Audit Logs | ig2,ig3
+8.6 | Collect DNS Query Audit Logs | ig2,ig3
+8.7 | Collect URL Request Audit Logs | ig2,ig3
+8.8 | Collect Command-Line Audit Logs | ig2,ig3
+8.9 | Centralize Audit Logs | ig2,ig3
+8.10 | Retain Audit Logs | ig2,ig3
+8.11 | Conduct Audit Log Reviews | ig2,ig3
+8.12 | Collect Service Provider Logs | ig3
+
+9.1 | Ensure Use of Only Fully Supported Browsers and Email Clients | ig1,ig2,ig3
+9.2 | Use DNS Filtering Services | ig1,ig2,ig3
+9.3 | Maintain and Enforce Network-Based URL Filters | ig2,ig3
+9.4 | Restrict Unnecessary or Unauthorized Browser and Email Client Extensions | ig2,ig3
+9.5 | Implement DMARC | ig2,ig3
+9.6 | Block Unnecessary File Types | ig2,ig3
+9.7 | Deploy and Maintain Email Server Anti-Malware Protections | ig3
+
+10.1 | Deploy and Maintain Anti-Malware Software | ig1,ig2,ig3
+10.2 | Configure Automatic Anti-Malware Signature Updates | ig1,ig2,ig3
+10.3 | Disable Autorun and Autoplay for Removable Media | ig1,ig2,ig3
+10.4 | Configure Automatic Anti-Malware Scanning of Removable Media | ig2,ig3
+10.5 | Enable Anti-Exploitation Features | ig2,ig3
+10.6 | Centrally Manage Anti-Malware Software | ig2,ig3
+10.7 | Use Behavior-Based Anti-Malware Software | ig2,ig3
+
+11.1 | Establish and Maintain a Data Recovery Process | ig1,ig2,ig3
+11.2 | Perform Automated Backups | ig1,ig2,ig3
+11.3 | Protect Recovery Data | ig1,ig2,ig3
+11.4 | Establish and Maintain an Isolated Instance of Recovery Data | ig1,ig2,ig3
+11.5 | Test Data Recovery | ig2,ig3
+
+12.1 | Ensure Network Infrastructure is Up-to-Date | ig1,ig2,ig3
+12.2 | Establish and Maintain a Secure Network Architecture | ig2,ig3
+12.3 | Securely Manage Network Infrastructure | ig2,ig3
+12.4 | Establish and Maintain Architecture Diagram(s) | ig2,ig3
+12.5 | Centralize Network Authentication, Authorization, and Auditing (AAA) | ig2,ig3
+12.6 | Use of Secure Network Management and Communication Protocols | ig2,ig3
+12.7 | Ensure Remote Devices Utilize a VPN and are Connecting to an Enterprise's AAA Infrastructure | ig2,ig3
+12.8 | Establish and Maintain Dedicated Computing Resources for All Administrative Work | ig3
+
+13.1 | Centralize Security Event Alerting | ig2,ig3
+13.2 | Deploy a Host-Based Intrusion Detection Solution | ig2,ig3
+13.3 | Deploy a Network Intrusion Detection Solution | ig2,ig3
+13.4 | Perform Traffic Filtering Between Network Segments | ig2,ig3
+13.5 | Manage Access Control for Remote Assets | ig2,ig3
+13.6 | Collect Network Traffic Flow Logs | ig2,ig3
+13.7 | Deploy a Host-Based Intrusion Prevention Solution | ig3
+13.8 | Deploy a Network Intrusion Prevention Solution | ig3
+13.9 | Deploy Port-Level Access Control | ig3
+13.10 | Perform Application Layer Filtering | ig3
+13.11 | Tune Security Event Alerting Thresholds | ig3
+
+14.1 | Establish and Maintain a Security Awareness Program | ig1,ig2,ig3
+14.2 | Train Workforce Members to Recognize Social Engineering Attacks | ig1,ig2,ig3
+14.3 | Train Workforce Members on Authentication Best Practices | ig1,ig2,ig3
+14.4 | Train Workforce on Data Handling Best Practices | ig1,ig2,ig3
+14.5 | Train Workforce Members on Causes of Unintentional Data Exposure | ig1,ig2,ig3
+14.6 | Train Workforce Members on Recognizing and Reporting Security Incidents | ig1,ig2,ig3
+14.7 | Train Workforce on How to Identify and Report if Their Enterprise Assets are Missing Security Updates | ig1,ig2,ig3
+14.8 | Train Workforce on the Dangers of Connecting to and Transmitting Enterprise Data Over Insecure Networks | ig1,ig2,ig3
+14.9 | Conduct Role-Specific Security Awareness and Skills Training | ig2,ig3
+
+15.1 | Establish and Maintain an Inventory of Service Providers | ig1,ig2,ig3
+15.2 | Establish and Maintain a Service Provider Management Policy | ig2,ig3
+15.3 | Classify Service Providers | ig2,ig3
+15.4 | Ensure Service Provider Contracts Include Security Requirements | ig2,ig3
+15.5 | Assess Service Providers | ig3
+15.6 | Monitor Service Providers | ig3
+15.7 | Securely Decommission Service Providers | ig3
+
+16.1 | Establish and Maintain a Secure Application Development Process | ig2,ig3
+16.2 | Establish and Maintain a Process to Accept and Address Software Vulnerabilities | ig2,ig3
+16.3 | Perform Root Cause Analysis on Security Vulnerabilities | ig2,ig3
+16.4 | Establish and Manage an Inventory of Third-Party Software Components | ig2,ig3
+16.5 | Use Up-to-Date and Trusted Third-Party Software Components | ig2,ig3
+16.6 | Establish and Maintain a Severity Rating System and Process for Application Vulnerabilities | ig2,ig3
+16.7 | Use Standard Hardening Configuration Templates for Application Infrastructure | ig2,ig3
+16.8 | Separate Production and Non-Production Systems | ig2,ig3
+16.9 | Train Developers in Application Security Concepts and Secure Coding | ig2,ig3
+16.10 | Apply Secure Design Principles in Application Architectures | ig2,ig3
+16.11 | Leverage Vetted Modules or Services for Application Security Components | ig2,ig3
+16.12 | Implement Code-Level Security Checks | ig3
+16.13 | Conduct Application Penetration Testing | ig3
+16.14 | Conduct Threat Modeling | ig3
+
+17.1 | Designate Personnel to Manage Incident Handling | ig1,ig2,ig3
+17.2 | Establish and Maintain Contact Information for Reporting Security Incidents | ig1,ig2,ig3
+17.3 | Establish and Maintain an Enterprise Process for Reporting Incidents | ig1,ig2,ig3
+17.4 | Establish and Maintain an Incident Response Process | ig2,ig3
+17.5 | Assign Key Roles and Responsibilities | ig2,ig3
+17.6 | Define Mechanisms for Communicating During Incident Response | ig2,ig3
+17.7 | Conduct Routine Incident Response Exercises | ig2,ig3
+17.8 | Conduct Post-Incident Reviews | ig2,ig3
+17.9 | Establish and Maintain Security Incident Thresholds | ig3
+
+18.1 | Establish and Maintain a Penetration Testing Program | ig2,ig3
+18.2 | Perform Periodic External Penetration Tests | ig2,ig3
+18.3 | Remediate Penetration Test Findings | ig2,ig3
+18.4 | Validate Security Measures | ig3
+18.5 | Perform Periodic Internal Penetration Tests | ig3

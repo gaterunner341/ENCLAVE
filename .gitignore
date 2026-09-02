@@ -1,8 +1,14 @@
-enclave-data/
-dist/
-*.test
+# build output
+/enclave
+/enclave.exe
+/dist/
 
-# Local build output. Anchored, so cmd/enclaved is not swept up with it.
-# ENCLAVE.exe is deliberately committed: it is the thing people download.
-/enclaved
-/enclaved.exe
+# runtime data directory (never commit an operational data set)
+/enclave-data/
+*.enclavedb
+
+# editor / OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/

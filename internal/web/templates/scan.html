@@ -1,0 +1,80 @@
+{{template "head" .}}
+{{$d := .Data}}{{$s := $d.Scan}}{{$e := .Enclave}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs">{{if $e}}<a href="/enclaves/{{$e.ID}}/scans">Imports</a>{{end}}</div>
+    <h1>{{$s.Title}}</h1>
+    <div class="pill-row" style="margin-top: .4rem">
+      <span class="badge plain">{{$s.Format}}</span>
+      <span class="badge plain">{{$s.Kind}}</span>
+      {{if $s.Version}}<span class="badge plain">{{$s.Version}}</span>{{end}}
+    </div>
+  </div>
+</div>
+
+<div class="split">
+  <div class="card">
+    <header><h2>Results</h2><span class="spacer"></span>
+      <span class="badge plain">{{comma $d.Total}} in this import</span></header>
+    {{if $d.Findings}}
+    <div class="table-wrap"><table data-sortable>
+      <thead><tr><th data-sort="text">Severity</th><th data-sort="text">Finding</th>
+        <th data-sort="text">Asset</th><th data-sort="text">Status</th><th>Controls</th></tr></thead>
+      <tbody>{{range $d.Findings}}
+      <tr>
+        <td><span class="badge {{severityClass .Severity}}">{{.Severity.Label}}</span></td>
+        <td class="wrap"><a href="/findings/{{.ID}}">{{truncate 100 .Title}}</a></td>
+        <td>{{template "assetlink" dict "Index" $d.AssetIndex "ID" .AssetID}}</td>
+        <td>{{.Status.Label}}</td>
+        <td class="mono" style="font-size: .76rem">{{range $cid, $refs := .ControlRefs}}{{join " " $refs}} {{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
+      </tr>
+      {{end}}</tbody>
+    </table></div>
+    {{if gt $d.Total (len $d.Findings)}}
+    <div class="table-note">Showing the first {{len $d.Findings}} of {{comma $d.Total}}.
+      {{if $e}}<a href="/enclaves/{{$e.ID}}/findings?scan={{$s.ID}}">Open them in the findings view</a>{{end}}.</div>
+    {{end}}
+    {{else}}<div class="empty"><p>This import produced no findings.</p></div>{{end}}
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>Severity</h3></header>
+      <div class="card-body">{{template "donut" dict "D" $d.Severity "T" "Severity"}}</div>
+    </div>
+
+    <div class="card">
+      <header><h3>The import</h3></header>
+      <div class="card-body">
+        <div class="facts">
+          <div><div class="k">File</div><div class="v mono">{{if $s.Filename}}{{$s.Filename}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Tool</div><div class="v">{{if $s.Tool}}{{$s.Tool}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Benchmark</div><div class="v">{{if $s.BenchmarkID}}{{$s.BenchmarkID}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Scan date</div><div class="v">{{date $s.ScanDate}}</div></div>
+          <div><div class="k">Imported</div><div class="v">{{datetime $s.ImportedAt}}</div></div>
+          <div><div class="k">Imported by</div><div class="v">{{if $s.ImportedBy}}{{$s.ImportedBy}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Unmapped</div><div class="v">{{comma $d.Unmapped}} open findings</div></div>
+        </div>
+        {{if $s.Notes}}<div class="prose box" style="margin-top: 1rem">{{$s.Notes}}</div>{{end}}
+      </div>
+    </div>
+
+    {{if $d.Assets}}
+    <div class="card">
+      <header><h3>Assets covered</h3></header>
+      <div class="table-wrap"><table><tbody>
+        {{range $d.Assets}}<tr><td><a href="/assets/{{.ID}}">{{.DisplayName}}</a></td>
+          <td style="color: var(--text-3); font-size: .8rem">{{.Type.Label}}</td></tr>{{end}}
+      </tbody></table></div>
+    </div>
+    {{end}}
+
+    {{if not .ReadOnly}}
+    <form method="post" action="/scans/{{$s.ID}}/delete"
+          data-confirm="Delete this import and the {{$d.Total}} findings it produced?">
+      <button class="btn danger" type="submit">Delete this import</button>
+    </form>
+    {{end}}
+  </div>
+</div>
+{{template "foot" .}}

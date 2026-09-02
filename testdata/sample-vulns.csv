@@ -1,0 +1,4 @@
+Asset Names,Asset IP Address,Asset OS Name,Vulnerability Title,Vulnerability ID,Vulnerability CVE IDs,Vulnerability Severity Level,Vulnerability CVSSv3 Score,Vulnerability Solution,First Discovered
+DB-SRV-04,10.20.4.40,Red Hat Enterprise Linux 9,OpenSSL vulnerable to CVE-2024-2511,rhel-9-openssl,CVE-2024-2511,Medium,5.9,Update the openssl package,2025-06-02
+DB-SRV-04,10.20.4.40,Red Hat Enterprise Linux 9,Kernel privilege escalation,rhel-9-kernel,CVE-2024-1086,Critical,9.8,Update the kernel package and reboot,2025-05-11
+WKS-1123,10.20.7.23,Windows 11 Enterprise,Google Chrome out of date,chrome-outdated,CVE-2025-4664,High,8.8,Update Google Chrome,2025-07-19

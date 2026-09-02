@@ -1,0 +1,96 @@
+{{template "head" .}}
+{{$d := .Data}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Reports</h1>
+    <p class="lede">Baseline position for every enclave, and the controls that are weak across
+      more than one of them. Everything here exports to CSV, and the page prints without the
+      navigation.</p>
+  </div>
+  <div>
+    <a class="btn" href="/export/baseline">Baseline CSV</a>
+    <a class="btn" href="/export/findings">Findings CSV</a>
+    <a class="btn" href="/export/risks">Risk CSV</a>
+  </div>
+</div>
+
+<div class="grid four" style="margin-bottom: 1.25rem">
+  <div class="stat"><div class="label">Enclaves</div><div class="value">{{comma $d.Counts.Enclaves}}</div></div>
+  <div class="stat"><div class="label">Assets</div><div class="value">{{comma $d.Counts.Assets}}</div></div>
+  <div class="stat"><div class="label">Open findings</div><div class="value">{{comma $d.Counts.OpenFindings}}</div></div>
+  <div class="stat"><div class="label">Open risk entries</div><div class="value">{{comma $d.Counts.OpenRisks}}</div></div>
+</div>
+
+<div class="card">
+  <header><h2>Baseline position</h2></header>
+  {{if $d.Rows}}
+  <div class="table-wrap">
+    <table data-sortable>
+      <thead><tr><th data-sort="text">Enclave</th><th data-sort="text">Baseline</th>
+        <th class="num" data-sort="number">Controls</th><th style="width: 200px">State mix</th>
+        <th class="num" data-sort="number">Coverage</th><th class="num" data-sort="number">Verified</th>
+        <th class="num" data-sort="number">Contradicted</th><th class="num" data-sort="number">Open gaps</th>
+        <th class="num" data-sort="number">Unmapped</th></tr></thead>
+      <tbody>
+      {{range $d.Rows}}{{$an := .Analysis}}
+      <tr>
+        <td><a href="/enclaves/{{.Enclave.ID}}/baseline?catalog={{$an.Catalog.ID}}"><strong>{{.Enclave.Name}}</strong></a>
+          <div style="color: var(--text-3); font-size: .78rem">{{.Enclave.Categorization.Label}} impact</div></td>
+        <td style="font-size: .82rem">{{.Catalog}}<div style="color: var(--text-3); font-size: .78rem">{{.Profile}}</div></td>
+        <td class="num">{{comma $an.Total}}</td>
+        <td>{{template "gapbar" dict "Counts" $an.Counts "Total" $an.Total}}</td>
+        <td class="num">{{pct $an.Coverage}}</td>
+        <td class="num">{{pct $an.Verified}}</td>
+        <td class="num">{{$n := countState $an.Counts "contradicted"}}{{if $n}}<span class="badge gap-contradicted">{{$n}}</span>{{else}}0{{end}}</td>
+        <td class="num">{{$an.OpenCount}}</td>
+        <td class="num">{{comma $an.UnmappedFindings}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="empty">
+    <h3>No enclave has a baseline assigned</h3>
+    <p>Assign a control framework to an enclave and this page fills in.</p>
+    <a class="btn" href="/enclaves">Enclaves</a>
+  </div>
+  {{end}}
+</div>
+
+<div class="card">
+  <header><h2>Weakest controls across the estate</h2><span class="spacer"></span>
+    <form method="get" style="display: flex; gap: .5rem; align-items: center">
+      <select name="catalog" class="btn" style="width: auto" onchange="this.form.submit()">
+        {{range $d.Catalogs}}{{if .Controls}}<option value="{{.ID}}" {{if eq .ID $d.Catalog}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}
+      </select>
+      <noscript><button class="btn small" type="submit">Show</button></noscript>
+    </form>
+  </header>
+  {{if $d.Weakest}}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width: 110px">Control</th><th>Title</th><th>Family</th>
+        <th class="num">Enclaves failing</th><th style="width: 140px">Share</th><th>Where</th></tr></thead>
+      <tbody>
+      {{range $d.Weakest}}
+      <tr>
+        <td class="mono">{{.ControlID}}</td>
+        <td class="wrap">{{.Title}}</td>
+        <td style="font-size: .8rem">{{.Family}}</td>
+        <td class="num">{{.Failing}} of {{.Total}}</td>
+        <td><div class="meter"><span style="width: {{printf "%.1f%%" .Share}}; background: var(--high)"></span></div></td>
+        <td style="font-size: .78rem; color: var(--text-2)">{{truncate 70 (join ", " .Enclaves)}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-note">A control failing in one enclave is a local problem. The same control
+    failing in most of them is a programme problem, and it is the one worth funding.</div>
+  {{else}}
+  <div class="empty"><p>Nothing is failing in the selected framework, or no enclave is measured
+    against it.</p></div>
+  {{end}}
+</div>
+{{template "foot" .}}

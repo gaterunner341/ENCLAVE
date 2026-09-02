@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2" id="xccdf_mil.disa.stig_benchmark_RHEL_9_STIG">
+  <title>Red Hat Enterprise Linux 9 Security Technical Implementation Guide</title>
+  <version>1.5</version>
+  <Rule id="xccdf_mil.disa.stig_rule_SV-257777r991589_rule" severity="medium">
+    <title>RHEL 9 must require authentication to access single-user mode.</title>
+    <description>Single-user mode is used for recovery when the system detects an issue.</description>
+    <ident system="http://cyber.mil/cci">CCI-000213</ident>
+    <fixtext>Set a password for the root account.</fixtext>
+    <check><check-content>Verify the rescue service requires authentication.</check-content></check>
+  </Rule>
+  <Rule id="xccdf_mil.disa.stig_rule_SV-257800r991554_rule" severity="high">
+    <title>RHEL 9 must not have the telnet-server package installed.</title>
+    <description>Removing the telnet-server package removes an unencrypted remote access service.</description>
+    <ident system="http://cyber.mil/cci">CCI-000381</ident>
+    <fixtext>Remove the telnet-server package.</fixtext>
+  </Rule>
+  <TestResult id="xccdf_org.open-scap_testresult_default" start-time="2025-08-20T02:00:00" end-time="2025-08-20T02:12:00">
+    <target>db-srv-04.example.org</target>
+    <target-address>10.20.4.40</target-address>
+    <rule-result idref="xccdf_mil.disa.stig_rule_SV-257777r991589_rule" severity="medium">
+      <result>fail</result>
+      <ident system="http://cyber.mil/cci">CCI-000213</ident>
+    </rule-result>
+    <rule-result idref="xccdf_mil.disa.stig_rule_SV-257800r991554_rule" severity="high">
+      <result>pass</result>
+    </rule-result>
+  </TestResult>
+</Benchmark>

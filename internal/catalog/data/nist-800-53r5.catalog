@@ -1,0 +1,507 @@
+# NIST SP 800-53 Revision 5 — security and privacy controls, with the three
+# impact baselines from SP 800-53B.
+#
+# This is a working copy carried inside ENCLAVE so the tool is useful on first
+# run. It covers every base control and the enhancements selected by the
+# baselines. For an authorisation package, import the authoritative OSCAL
+# catalogue from NIST on the Catalogues page; it replaces this one by id.
+
+@id nist-800-53r5
+@name NIST SP 800-53 Revision 5
+@version Release 5.1.1
+@publisher National Institute of Standards and Technology
+@description Security and privacy controls for information systems and organizations, with the low, moderate and high impact baselines from SP 800-53B.
+@source https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final
+
+@profile low = Low impact baseline | Controls selected by SP 800-53B for a low-impact system.
+@profile moderate = Moderate impact baseline | Controls selected by SP 800-53B for a moderate-impact system.
+@profile high = High impact baseline | Controls selected by SP 800-53B for a high-impact system.
+@profile privacy = Privacy control baseline | Controls selected by SP 800-53B where personally identifiable information is processed.
+
+@family AC = Access Control
+@family AT = Awareness and Training
+@family AU = Audit and Accountability
+@family CA = Assessment, Authorization, and Monitoring
+@family CM = Configuration Management
+@family CP = Contingency Planning
+@family IA = Identification and Authentication
+@family IR = Incident Response
+@family MA = Maintenance
+@family MP = Media Protection
+@family PE = Physical and Environmental Protection
+@family PL = Planning
+@family PM = Program Management
+@family PS = Personnel Security
+@family PT = PII Processing and Transparency
+@family RA = Risk Assessment
+@family SA = System and Services Acquisition
+@family SC = System and Communications Protection
+@family SI = System and Information Integrity
+@family SR = Supply Chain Risk Management
+
+AC-1 | Policy and Procedures | low,moderate,high
+AC-2 | Account Management | low,moderate,high
+AC-2(1) | Automated System Account Management | moderate,high
+AC-2(2) | Automated Temporary and Emergency Account Management | moderate,high
+AC-2(3) | Disable Accounts | moderate,high
+AC-2(4) | Automated Audit Actions | moderate,high
+AC-2(5) | Inactivity Logout | moderate,high
+AC-2(9) | Restrictions on Use of Shared and Group Accounts | high
+AC-2(11) | Usage Conditions | high
+AC-2(12) | Account Monitoring for Atypical Usage | high
+AC-2(13) | Disable Accounts for High-risk Individuals | moderate,high
+AC-3 | Access Enforcement | low,moderate,high
+AC-4 | Information Flow Enforcement | moderate,high
+AC-4(4) | Flow Control of Encrypted Information | high
+AC-5 | Separation of Duties | moderate,high
+AC-6 | Least Privilege | moderate,high
+AC-6(1) | Authorize Access to Security Functions | moderate,high
+AC-6(2) | Non-privileged Access for Nonsecurity Functions | moderate,high
+AC-6(3) | Network Access to Privileged Commands | high
+AC-6(5) | Privileged Accounts | moderate,high
+AC-6(7) | Review of User Privileges | moderate,high
+AC-6(9) | Log Use of Privileged Functions | moderate,high
+AC-6(10) | Prohibit Non-privileged Users from Executing Privileged Functions | moderate,high
+AC-7 | Unsuccessful Logon Attempts | low,moderate,high
+AC-8 | System Use Notification | low,moderate,high
+AC-9 | Previous Logon Notification |
+AC-10 | Concurrent Session Control | high
+AC-11 | Device Lock | moderate,high
+AC-11(1) | Pattern-hiding Displays | moderate,high
+AC-12 | Session Termination | moderate,high
+AC-14 | Permitted Actions Without Identification or Authentication | low,moderate,high
+AC-16 | Security and Privacy Attributes |
+AC-17 | Remote Access | low,moderate,high
+AC-17(1) | Monitoring and Control | moderate,high
+AC-17(2) | Protection of Confidentiality and Integrity Using Encryption | moderate,high
+AC-17(3) | Managed Access Control Points | moderate,high
+AC-17(4) | Privileged Commands and Access | moderate,high
+AC-18 | Wireless Access | low,moderate,high
+AC-18(1) | Authentication and Encryption | moderate,high
+AC-18(3) | Disable Wireless Networking | high
+AC-18(4) | Restrict Configurations by Users | high
+AC-18(5) | Antennas and Transmission Power Levels | high
+AC-19 | Access Control for Mobile Devices | low,moderate,high
+AC-19(5) | Full Device or Container-based Encryption | moderate,high
+AC-20 | Use of External Systems | low,moderate,high
+AC-20(1) | Limits on Authorized Use | moderate,high
+AC-20(2) | Portable Storage Devices - Restricted Use | moderate,high
+AC-21 | Information Sharing | moderate,high
+AC-22 | Publicly Accessible Content | low,moderate,high
+AC-23 | Data Mining Protection |
+AC-24 | Access Control Decisions |
+AC-25 | Reference Monitor |
+
+AT-1 | Policy and Procedures | low,moderate,high
+AT-2 | Literacy Training and Awareness | low,moderate,high
+AT-2(2) | Insider Threat | low,moderate,high
+AT-2(3) | Social Engineering and Mining | moderate,high
+AT-3 | Role-based Training | low,moderate,high
+AT-4 | Training Records | low,moderate,high
+AT-6 | Training Feedback |
+
+AU-1 | Policy and Procedures | low,moderate,high
+AU-2 | Event Logging | low,moderate,high
+AU-3 | Content of Audit Records | low,moderate,high
+AU-3(1) | Additional Audit Information | moderate,high
+AU-4 | Audit Log Storage Capacity | low,moderate,high
+AU-5 | Response to Audit Logging Process Failures | low,moderate,high
+AU-5(1) | Storage Capacity Warning | high
+AU-5(2) | Real-time Alerts | high
+AU-6 | Audit Record Review, Analysis, and Reporting | low,moderate,high
+AU-6(1) | Automated Process Integration | moderate,high
+AU-6(3) | Correlate Audit Record Repositories | moderate,high
+AU-6(5) | Integrated Analysis of Audit Records | high
+AU-6(6) | Correlation with Physical Monitoring | high
+AU-7 | Audit Record Reduction and Report Generation | moderate,high
+AU-7(1) | Automatic Processing | moderate,high
+AU-8 | Time Stamps | low,moderate,high
+AU-9 | Protection of Audit Information | low,moderate,high
+AU-9(2) | Store on Separate Physical Systems or Components | high
+AU-9(3) | Cryptographic Protection | high
+AU-9(4) | Access by Subset of Privileged Users | moderate,high
+AU-10 | Non-repudiation | high
+AU-11 | Audit Record Retention | low,moderate,high
+AU-12 | Audit Record Generation | low,moderate,high
+AU-12(1) | System-wide and Time-correlated Audit Trail | high
+AU-12(3) | Changes by Authorized Individuals | high
+AU-13 | Monitoring for Information Disclosure |
+AU-14 | Session Audit |
+AU-16 | Cross-organizational Audit Logging |
+
+CA-1 | Policy and Procedures | low,moderate,high
+CA-2 | Control Assessments | low,moderate,high
+CA-2(1) | Independent Assessors | moderate,high
+CA-2(2) | Specialized Assessments | high
+CA-3 | Information Exchange | low,moderate,high
+CA-5 | Plan of Action and Milestones | low,moderate,high
+CA-6 | Authorization | low,moderate,high
+CA-7 | Continuous Monitoring | low,moderate,high
+CA-7(1) | Independent Assessment | moderate,high
+CA-7(4) | Risk Monitoring | low,moderate,high
+CA-8 | Penetration Testing | high
+CA-9 | Internal System Connections | low,moderate,high
+
+CM-1 | Policy and Procedures | low,moderate,high
+CM-2 | Baseline Configuration | low,moderate,high
+CM-2(2) | Automation Support for Accuracy and Currency | moderate,high
+CM-2(3) | Retention of Previous Configurations | moderate,high
+CM-2(7) | Configure Systems and Components for High-risk Areas | moderate,high
+CM-3 | Configuration Change Control | moderate,high
+CM-3(2) | Testing, Validation, and Documentation of Changes | moderate,high
+CM-3(4) | Security and Privacy Representatives | high
+CM-3(6) | Cryptography Management | high
+CM-4 | Impact Analyses | low,moderate,high
+CM-4(1) | Separate Test Environments | high
+CM-4(2) | Verification of Controls | moderate,high
+CM-5 | Access Restrictions for Change | low,moderate,high
+CM-5(1) | Automated Access Enforcement and Audit Records | high
+CM-6 | Configuration Settings | low,moderate,high
+CM-6(1) | Automated Management, Application, and Verification | high
+CM-7 | Least Functionality | low,moderate,high
+CM-7(1) | Periodic Review | moderate,high
+CM-7(2) | Prevent Program Execution | moderate,high
+CM-7(5) | Authorized Software - Allow-by-exception | moderate,high
+CM-8 | System Component Inventory | low,moderate,high
+CM-8(1) | Updates During Installation and Removal | moderate,high
+CM-8(2) | Automated Maintenance | high
+CM-8(3) | Automated Unauthorized Component Detection | moderate,high
+CM-8(4) | Accountability Information | high
+CM-9 | Configuration Management Plan | moderate,high
+CM-10 | Software Usage Restrictions | low,moderate,high
+CM-11 | User-installed Software | low,moderate,high
+CM-12 | Information Location | moderate,high
+CM-12(1) | Automated Tools to Support Information Location | moderate,high
+CM-14 | Signed Components | moderate,high
+
+CP-1 | Policy and Procedures | low,moderate,high
+CP-2 | Contingency Plan | low,moderate,high
+CP-2(1) | Coordinate with Related Plans | moderate,high
+CP-2(2) | Capacity Planning | high
+CP-2(3) | Resume Mission and Business Functions | moderate,high
+CP-2(5) | Continue Mission and Business Functions | high
+CP-2(8) | Identify Critical Assets | moderate,high
+CP-3 | Contingency Training | low,moderate,high
+CP-3(1) | Simulated Events | high
+CP-4 | Contingency Plan Testing | low,moderate,high
+CP-4(1) | Coordinate with Related Plans | moderate,high
+CP-4(2) | Alternate Processing Site | high
+CP-6 | Alternate Storage Site | moderate,high
+CP-6(1) | Separation from Primary Site | moderate,high
+CP-6(2) | Recovery Time and Recovery Point Objectives | high
+CP-6(3) | Accessibility | moderate,high
+CP-7 | Alternate Processing Site | moderate,high
+CP-7(1) | Separation from Primary Site | moderate,high
+CP-7(2) | Accessibility | moderate,high
+CP-7(3) | Priority of Service | moderate,high
+CP-7(4) | Preparation for Use | high
+CP-8 | Telecommunications Services | moderate,high
+CP-8(1) | Priority of Service Provisions | moderate,high
+CP-8(2) | Single Points of Failure | moderate,high
+CP-8(3) | Separation of Primary and Alternate Providers | high
+CP-8(4) | Provider Contingency Plan | high
+CP-9 | System Backup | low,moderate,high
+CP-9(1) | Testing for Reliability and Integrity | moderate,high
+CP-9(2) | Test Restoration Using Sampling | high
+CP-9(3) | Separate Storage for Critical Information | high
+CP-9(5) | Transfer to Alternate Storage Site | high
+CP-9(8) | Cryptographic Protection | moderate,high
+CP-10 | System Recovery and Reconstitution | low,moderate,high
+CP-10(2) | Transaction Recovery | moderate,high
+CP-10(4) | Restore Within Time Period | high
+CP-11 | Alternate Communications Protocols |
+CP-12 | Safe Mode |
+CP-13 | Alternative Security Mechanisms |
+
+IA-1 | Policy and Procedures | low,moderate,high
+IA-2 | Identification and Authentication (Organizational Users) | low,moderate,high
+IA-2(1) | Multi-factor Authentication to Privileged Accounts | low,moderate,high
+IA-2(2) | Multi-factor Authentication to Non-privileged Accounts | low,moderate,high
+IA-2(5) | Individual Authentication with Group Authentication | moderate,high
+IA-2(6) | Access to Accounts - Separate Device | high
+IA-2(8) | Access to Accounts - Replay Resistant | low,moderate,high
+IA-2(12) | Acceptance of PIV Credentials | low,moderate,high
+IA-3 | Device Identification and Authentication | moderate,high
+IA-4 | Identifier Management | low,moderate,high
+IA-4(4) | Identify User Status | moderate,high
+IA-5 | Authenticator Management | low,moderate,high
+IA-5(1) | Password-based Authentication | low,moderate,high
+IA-5(2) | Public Key-based Authentication | moderate,high
+IA-5(6) | Protection of Authenticators | moderate,high
+IA-6 | Authentication Feedback | low,moderate,high
+IA-7 | Cryptographic Module Authentication | low,moderate,high
+IA-8 | Identification and Authentication (Non-organizational Users) | low,moderate,high
+IA-8(1) | Acceptance of PIV Credentials from Other Agencies | low,moderate,high
+IA-8(2) | Acceptance of External Authenticators | low,moderate,high
+IA-8(4) | Use of Defined Profiles | low,moderate,high
+IA-9 | Service Identification and Authentication |
+IA-10 | Adaptive Authentication |
+IA-11 | Re-authentication | low,moderate,high
+IA-12 | Identity Proofing | moderate,high
+IA-12(2) | Identity Evidence | moderate,high
+IA-12(3) | Identity Evidence Validation and Verification | moderate,high
+IA-12(4) | In-person Validation and Verification | high
+IA-12(5) | Address Confirmation | moderate,high
+
+IR-1 | Policy and Procedures | low,moderate,high
+IR-2 | Incident Response Training | low,moderate,high
+IR-2(1) | Simulated Events | high
+IR-2(2) | Automated Training Environments | high
+IR-3 | Incident Response Testing | moderate,high
+IR-3(2) | Coordination with Related Plans | moderate,high
+IR-4 | Incident Handling | low,moderate,high
+IR-4(1) | Automated Incident Handling Processes | moderate,high
+IR-4(4) | Information Correlation | high
+IR-4(11) | Integrated Incident Response Team | high
+IR-5 | Incident Monitoring | low,moderate,high
+IR-5(1) | Automated Tracking, Data Collection, and Analysis | high
+IR-6 | Incident Reporting | low,moderate,high
+IR-6(1) | Automated Reporting | moderate,high
+IR-6(3) | Supply Chain Coordination | moderate,high
+IR-7 | Incident Response Assistance | low,moderate,high
+IR-7(1) | Automation Support for Availability of Information and Support | moderate,high
+IR-8 | Incident Response Plan | low,moderate,high
+IR-9 | Information Spillage Response |
+
+MA-1 | Policy and Procedures | low,moderate,high
+MA-2 | Controlled Maintenance | low,moderate,high
+MA-2(2) | Automated Maintenance Activities | high
+MA-3 | Maintenance Tools | moderate,high
+MA-3(1) | Inspect Tools | moderate,high
+MA-3(2) | Inspect Media | moderate,high
+MA-3(3) | Prevent Unauthorized Removal | moderate,high
+MA-4 | Nonlocal Maintenance | low,moderate,high
+MA-4(3) | Comparable Security and Sanitization | high
+MA-5 | Maintenance Personnel | low,moderate,high
+MA-5(1) | Individuals Without Appropriate Access | high
+MA-6 | Timely Maintenance | moderate,high
+MA-7 | Field Maintenance |
+
+MP-1 | Policy and Procedures | low,moderate,high
+MP-2 | Media Access | low,moderate,high
+MP-3 | Media Marking | moderate,high
+MP-4 | Media Storage | moderate,high
+MP-5 | Media Transport | moderate,high
+MP-6 | Media Sanitization | low,moderate,high
+MP-6(1) | Review, Approve, Track, Document, and Verify | high
+MP-6(2) | Equipment Testing | high
+MP-6(3) | Nondestructive Techniques | high
+MP-7 | Media Use | low,moderate,high
+MP-8 | Media Downgrading |
+
+PE-1 | Policy and Procedures | low,moderate,high
+PE-2 | Physical Access Authorizations | low,moderate,high
+PE-3 | Physical Access Control | low,moderate,high
+PE-3(1) | System Access | high
+PE-4 | Access Control for Transmission | moderate,high
+PE-5 | Access Control for Output Devices | moderate,high
+PE-6 | Monitoring Physical Access | low,moderate,high
+PE-6(1) | Intrusion Alarms and Surveillance Equipment | moderate,high
+PE-6(4) | Monitoring Physical Access to Systems | high
+PE-8 | Visitor Access Records | low,moderate,high
+PE-8(1) | Automated Records Maintenance and Review | high
+PE-9 | Power Equipment and Cabling | moderate,high
+PE-10 | Emergency Shutoff | moderate,high
+PE-11 | Emergency Power | moderate,high
+PE-11(1) | Alternate Power Supply - Minimal Operational Capability | high
+PE-12 | Emergency Lighting | low,moderate,high
+PE-13 | Fire Protection | low,moderate,high
+PE-13(1) | Detection Systems - Automatic Activation and Notification | moderate,high
+PE-13(2) | Suppression Systems - Automatic Activation and Notification | high
+PE-14 | Environmental Controls | low,moderate,high
+PE-15 | Water Damage Protection | low,moderate,high
+PE-15(1) | Automation Support | high
+PE-16 | Delivery and Removal | low,moderate,high
+PE-17 | Alternate Work Site | moderate,high
+PE-18 | Location of System Components | high
+PE-19 | Information Leakage |
+PE-20 | Asset Monitoring and Tracking |
+PE-21 | Electromagnetic Pulse Protection |
+PE-22 | Component Marking |
+PE-23 | Facility Location |
+
+PL-1 | Policy and Procedures | low,moderate,high
+PL-2 | System Security and Privacy Plans | low,moderate,high
+PL-4 | Rules of Behavior | low,moderate,high
+PL-4(1) | Social Media and External Site/Application Usage Restrictions | low,moderate,high
+PL-7 | Concept of Operations |
+PL-8 | Security and Privacy Architectures | moderate,high
+PL-9 | Central Management |
+PL-10 | Baseline Selection | low,moderate,high
+PL-11 | Baseline Tailoring | low,moderate,high
+
+PM-1 | Information Security Program Plan |
+PM-2 | Information Security Program Leadership Role |
+PM-3 | Information Security and Privacy Resources |
+PM-4 | Plan of Action and Milestones Process |
+PM-5 | System Inventory |
+PM-6 | Measures of Performance |
+PM-7 | Enterprise Architecture |
+PM-8 | Critical Infrastructure Plan |
+PM-9 | Risk Management Strategy |
+PM-10 | Authorization Process |
+PM-11 | Mission and Business Process Definition |
+PM-12 | Insider Threat Program |
+PM-13 | Security and Privacy Workforce |
+PM-14 | Testing, Training, and Monitoring |
+PM-15 | Security and Privacy Groups and Associations |
+PM-16 | Threat Awareness Program |
+PM-17 | Protecting Controlled Unclassified Information on External Systems |
+PM-18 | Privacy Program Plan | privacy
+PM-19 | Privacy Program Leadership Role | privacy
+PM-20 | Dissemination of Privacy Program Information | privacy
+PM-21 | Accounting of Disclosures | privacy
+PM-22 | Personally Identifiable Information Quality Management | privacy
+PM-23 | Data Governance Body |
+PM-24 | Data Integrity Board | privacy
+PM-25 | Minimization of Personally Identifiable Information Used in Testing, Training, and Research | privacy
+PM-26 | Complaint Management | privacy
+PM-27 | Privacy Reporting | privacy
+PM-28 | Risk Framing |
+PM-29 | Risk Management Program Leadership Roles |
+PM-30 | Supply Chain Risk Management Strategy |
+PM-31 | Continuous Monitoring Strategy |
+PM-32 | Purposing |
+
+PS-1 | Policy and Procedures | low,moderate,high
+PS-2 | Position Risk Designation | low,moderate,high
+PS-3 | Personnel Screening | low,moderate,high
+PS-4 | Personnel Termination | low,moderate,high
+PS-4(2) | Automated Actions | high
+PS-5 | Personnel Transfer | low,moderate,high
+PS-6 | Access Agreements | low,moderate,high
+PS-7 | External Personnel Security | low,moderate,high
+PS-8 | Personnel Sanctions | low,moderate,high
+PS-9 | Position Descriptions | low,moderate,high
+
+PT-1 | Policy and Procedures | privacy
+PT-2 | Authority to Process Personally Identifiable Information | privacy
+PT-3 | Personally Identifiable Information Processing Purposes | privacy
+PT-4 | Consent | privacy
+PT-5 | Privacy Notice | privacy
+PT-6 | System of Records Notice | privacy
+PT-7 | Specific Categories of Personally Identifiable Information | privacy
+PT-8 | Computer Matching Requirements | privacy
+
+RA-1 | Policy and Procedures | low,moderate,high
+RA-2 | Security Categorization | low,moderate,high
+RA-3 | Risk Assessment | low,moderate,high
+RA-3(1) | Supply Chain Risk Assessment | low,moderate,high
+RA-5 | Vulnerability Monitoring and Scanning | low,moderate,high
+RA-5(2) | Update Vulnerabilities to Be Scanned | low,moderate,high
+RA-5(5) | Privileged Access | moderate,high
+RA-5(11) | Public Disclosure Program | low,moderate,high
+RA-6 | Technical Surveillance Countermeasures Survey |
+RA-7 | Risk Response | low,moderate,high
+RA-8 | Privacy Impact Assessments | privacy
+RA-9 | Criticality Analysis | moderate,high
+RA-10 | Threat Hunting | high
+
+SA-1 | Policy and Procedures | low,moderate,high
+SA-2 | Allocation of Resources | low,moderate,high
+SA-3 | System Development Life Cycle | low,moderate,high
+SA-4 | Acquisition Process | low,moderate,high
+SA-4(1) | Functional Properties of Controls | moderate,high
+SA-4(2) | Design and Implementation Information for Controls | moderate,high
+SA-4(9) | Functions, Ports, Protocols, and Services in Use | moderate,high
+SA-4(10) | Use of Approved PIV Products | low,moderate,high
+SA-5 | System Documentation | low,moderate,high
+SA-8 | Security and Privacy Engineering Principles | low,moderate,high
+SA-9 | External System Services | low,moderate,high
+SA-9(2) | Identification of Functions, Ports, Protocols, and Services | moderate,high
+SA-10 | Developer Configuration Management | moderate,high
+SA-11 | Developer Testing and Evaluation | moderate,high
+SA-15 | Development Process, Standards, and Tools | high
+SA-15(3) | Criticality Analysis | high
+SA-16 | Developer-provided Training | high
+SA-17 | Developer Security and Privacy Architecture and Design | high
+SA-21 | Developer Screening | high
+SA-22 | Unsupported System Components | low,moderate,high
+SA-23 | Specialization |
+
+SC-1 | Policy and Procedures | low,moderate,high
+SC-2 | Separation of System and User Functionality | moderate,high
+SC-3 | Security Function Isolation | high
+SC-4 | Information in Shared System Resources | moderate,high
+SC-5 | Denial-of-service Protection | low,moderate,high
+SC-7 | Boundary Protection | low,moderate,high
+SC-7(3) | Access Points | moderate,high
+SC-7(4) | External Telecommunications Services | moderate,high
+SC-7(5) | Deny by Default - Allow by Exception | moderate,high
+SC-7(7) | Split Tunneling for Remote Devices | moderate,high
+SC-7(8) | Route Traffic to Authenticated Proxy Servers | moderate,high
+SC-7(18) | Fail Secure | high
+SC-7(21) | Isolation of System Components | high
+SC-8 | Transmission Confidentiality and Integrity | moderate,high
+SC-8(1) | Cryptographic Protection | moderate,high
+SC-10 | Network Disconnect | moderate,high
+SC-12 | Cryptographic Key Establishment and Management | low,moderate,high
+SC-12(1) | Availability | high
+SC-13 | Cryptographic Protection | low,moderate,high
+SC-15 | Collaborative Computing Devices and Applications | low,moderate,high
+SC-17 | Public Key Infrastructure Certificates | moderate,high
+SC-18 | Mobile Code | moderate,high
+SC-20 | Secure Name/Address Resolution Service (Authoritative Source) | low,moderate,high
+SC-21 | Secure Name/Address Resolution Service (Recursive or Caching Resolver) | low,moderate,high
+SC-22 | Architecture and Provisioning for Name/Address Resolution Service | low,moderate,high
+SC-23 | Session Authenticity | moderate,high
+SC-24 | Fail in Known State | high
+SC-28 | Protection of Information at Rest | moderate,high
+SC-28(1) | Cryptographic Protection | moderate,high
+SC-39 | Process Isolation | low,moderate,high
+SC-45 | System Time Synchronization |
+
+SI-1 | Policy and Procedures | low,moderate,high
+SI-2 | Flaw Remediation | low,moderate,high
+SI-2(2) | Automated Flaw Remediation Status | moderate,high
+SI-2(3) | Time to Remediate Flaws and Benchmarks for Corrective Actions | high
+SI-3 | Malicious Code Protection | low,moderate,high
+SI-4 | System Monitoring | low,moderate,high
+SI-4(2) | Automated Tools and Mechanisms for Real-time Analysis | moderate,high
+SI-4(4) | Inbound and Outbound Communications Traffic | moderate,high
+SI-4(5) | System-generated Alerts | moderate,high
+SI-4(10) | Visibility of Encrypted Communications | high
+SI-4(12) | Automated Organization-generated Alerts | high
+SI-4(14) | Wireless Intrusion Detection | high
+SI-4(20) | Privileged Users | high
+SI-4(22) | Unauthorized Network Services | high
+SI-5 | Security Alerts, Advisories, and Directives | low,moderate,high
+SI-5(1) | Automated Alerts and Advisories | high
+SI-6 | Security and Privacy Function Verification | high
+SI-7 | Software, Firmware, and Information Integrity | moderate,high
+SI-7(1) | Integrity Checks | moderate,high
+SI-7(2) | Automated Notifications of Integrity Violations | high
+SI-7(5) | Automated Response to Integrity Violations | high
+SI-7(7) | Integration of Detection and Response | moderate,high
+SI-8 | Spam Protection | moderate,high
+SI-8(2) | Automatic Updates | moderate,high
+SI-10 | Information Input Validation | moderate,high
+SI-11 | Error Handling | moderate,high
+SI-12 | Information Management and Retention | low,moderate,high
+SI-13 | Predictable Failure Prevention |
+SI-14 | Non-persistence |
+SI-15 | Information Output Filtering |
+SI-16 | Memory Protection | moderate,high
+SI-17 | Fail-safe Procedures |
+SI-18 | Personally Identifiable Information Quality Operations | privacy
+SI-19 | De-identification |
+SI-20 | Tainting |
+SI-21 | Information Refresh |
+SI-23 | Information Fragmentation |
+
+SR-1 | Policy and Procedures | low,moderate,high
+SR-2 | Supply Chain Risk Management Plan | low,moderate,high
+SR-2(1) | Establish SCRM Team | low,moderate,high
+SR-3 | Supply Chain Controls and Processes | low,moderate,high
+SR-4 | Provenance |
+SR-5 | Acquisition Strategies, Tools, and Methods | low,moderate,high
+SR-6 | Supplier Assessments and Reviews | moderate,high
+SR-7 | Supply Chain Operations Security |
+SR-8 | Notification Agreements | low,moderate,high
+SR-9 | Tamper Resistance and Detection | high
+SR-9(1) | Multiple Stages of System Development Life Cycle | high
+SR-10 | Inspection of Systems or Components | low,moderate,high
+SR-11 | Component Authenticity | low,moderate,high
+SR-11(1) | Anti-counterfeit Training | low,moderate,high
+SR-11(2) | Configuration Control for Component Service and Repair | low,moderate,high
+SR-12 | Component Disposal | low,moderate,high

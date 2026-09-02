@@ -1,0 +1,95 @@
+{{template "head" .}}
+{{$d := .Data}}{{$e := .Enclave}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Risk register</h1>
+    <p class="lede">Tracked risks for {{$e.Name}}: what is wrong, who owns it, and when it is due.
+      A finding becomes an entry here when it needs a plan rather than a patch.</p>
+  </div>
+  <div>
+    <a class="btn" href="/export/risks?enclave={{$e.ID}}">Export</a>
+    {{if not .ReadOnly}}<a class="btn primary" href="/enclaves/{{$e.ID}}/risk/new">New entry</a>{{end}}
+  </div>
+</div>
+
+<div class="split">
+  <div class="card">
+    <form class="filters" method="get" data-autosubmit>
+      <div class="field"><label for="show">Show</label>
+        <select id="show" name="show">
+          <option value="" {{if eq $d.Show ""}}selected{{end}}>Open</option>
+          <option value="all" {{if eq $d.Show "all"}}selected{{end}}>Everything</option>
+          <option value="closed" {{if eq $d.Show "closed"}}selected{{end}}>Closed</option>
+        </select></div>
+      <div class="field grow"><label for="filter">Filter rows</label>
+        <input type="search" id="filter" data-filters="risk-table" placeholder="title, owner, control"></div>
+    </form>
+    {{if $d.Rows}}
+    <div class="table-wrap">
+      <table id="risk-table" data-sortable>
+        <thead><tr><th data-sort="text">Title</th><th data-sort="text">Owner</th>
+          <th data-sort="text">Status</th><th class="num" data-sort="number">L</th>
+          <th class="num" data-sort="number">I</th><th class="num" data-sort="number">Score</th>
+          <th data-sort="text">Due</th><th>Controls</th></tr></thead>
+        <tbody>{{range $d.Rows}}
+        <tr>
+          <td class="wrap">{{if $.ReadOnly}}{{.Title}}{{else}}<a href="/risk/{{.ID}}/edit">{{.Title}}</a>{{end}}
+            {{if .Weakness}}<div style="color: var(--text-3); font-size: .78rem">{{truncate 90 .Weakness}}</div>{{end}}</td>
+          <td>{{if .Owner}}{{.Owner}}{{else}}<span style="color: var(--text-3)">unassigned</span>{{end}}</td>
+          <td><span class="badge plain">{{humanise .Status}}</span></td>
+          <td class="num">{{.Likelihood}}</td>
+          <td class="num">{{.Impact}}</td>
+          <td class="num"><strong>{{.Score}}</strong> <span style="color: var(--text-3); font-size: .76rem">{{.Band}}</span></td>
+          <td style="white-space: nowrap">{{dateP .Due}}{{if .Overdue $.Now}}<div><span class="badge sev-high">overdue</span></div>{{end}}</td>
+          <td class="mono" style="font-size: .76rem">
+            {{range $cid, $refs := .ControlRefs}}{{join " " $refs}}<br>{{else}}—{{end}}</td>
+        </tr>
+        {{end}}</tbody>
+      </table>
+    </div>
+    <div class="table-note">{{comma $d.Total}} entries in total, {{$d.Overdue}} past their due date.</div>
+    {{else}}
+    <div class="empty">
+      <h3>Nothing recorded</h3>
+      <p>Raise an entry from a finding, or add one by hand for a risk no scanner will ever see.</p>
+      {{if not .ReadOnly}}<a class="btn primary" href="/enclaves/{{$e.ID}}/risk/new">New entry</a>{{end}}
+    </div>
+    {{end}}
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>Open entries by likelihood and impact</h3></header>
+      <div class="card-body">
+        <table class="matrix">
+          <tbody>
+          {{range $d.Matrix}}
+          <tr>
+            <td class="axis">{{(index . 0).Likelihood}}</td>
+            {{range .}}
+            <td class="{{if .Count}}risk-{{.Tier}}{{else}}m0{{end}}" title="Likelihood {{.Likelihood}}, impact {{.Impact}}, score {{.Score}}">{{if .Count}}{{.Count}}{{else}}·{{end}}</td>
+            {{end}}
+          </tr>
+          {{end}}
+          <tr><td class="axis"></td>
+            {{range seq 5}}<td class="axis">{{add . 1}}</td>{{end}}</tr>
+          </tbody>
+        </table>
+        <p style="margin-top: .75rem; color: var(--text-3); font-size: .8rem">
+          Likelihood down the side, impact across the bottom, both on a one to five scale.
+          Only open entries are counted.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h3>What belongs here</h3></header>
+      <div class="card-body" style="color: var(--text-2); font-size: .84rem">
+        <p>A finding that will be patched next Tuesday does not need an entry. One that needs a
+          waiver, a compensating control, funding, or a date somebody has to answer for does.</p>
+        <p style="margin: 0">Entries carry control references, so an accepted risk shows up against
+          the control it weakens rather than disappearing into a spreadsheet.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{{template "foot" .}}
