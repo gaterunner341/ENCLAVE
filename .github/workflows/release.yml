@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, for example v0.1"
+        required: true
+        default: "v0.1"
 
 permissions:
   contents: write
@@ -16,16 +22,37 @@ jobs:
         with:
           go-version: "1.24"
       - run: go test ./...
+
+      - name: Work out the version
+        id: version
+        run: echo "value=${{ inputs.version || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
       - name: Build the Windows package
         env:
           GOOS: windows
           GOARCH: amd64
           CGO_ENABLED: "0"
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
           mkdir -p dist
           go build -trimpath -ldflags "-s -w" -o dist/ENCLAVE.exe ./cmd/enclaved
           cp "START HERE.txt" dist/
-          cd dist && zip -r "../ENCLAVE-${GITHUB_REF_NAME}-windows.zip" .
+          cd dist && zip -r "../ENCLAVE-${VERSION}-windows.zip" .
+
+      - name: Checksum
+        run: sha256sum ENCLAVE-*-windows.zip | tee SHA256SUMS.txt
+
       - uses: softprops/action-gh-release@v2
         with:
-          files: ENCLAVE-*-windows.zip
+          tag_name: ${{ steps.version.outputs.value }}
+          name: ENCLAVE ${{ steps.version.outputs.value }}
+          body: |
+            Windows build of ENCLAVE. Unzip anywhere and double-click `ENCLAVE.exe`.
+            It serves on http://127.0.0.1:8080 and stores data in an `enclave-data`
+            folder beside the executable.
+
+            The binary is unsigned, so Windows SmartScreen will warn on first run:
+            More info, then Run anyway. Verify the download against `SHA256SUMS.txt`.
+          files: |
+            ENCLAVE-*-windows.zip
+            SHA256SUMS.txt
