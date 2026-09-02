@@ -3,6 +3,6 @@ dist/
 *.test
 
 # Local build output. Anchored, so cmd/enclaved is not swept up with it.
-/ENCLAVE.exe
+# ENCLAVE.exe is deliberately committed: it is the thing people download.
 /enclaved
 /enclaved.exe
