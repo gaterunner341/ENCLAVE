@@ -1,0 +1,8 @@
+enclave-data/
+dist/
+*.test
+
+# Local build output. Anchored, so cmd/enclaved is not swept up with it.
+/ENCLAVE.exe
+/enclaved
+/enclaved.exe

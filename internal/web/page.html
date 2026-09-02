@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ENCLAVE</title>
+<style>
+:root{color-scheme:light dark;--plane:#e9edee;--surface:#fafbfc;--surface-2:#f1f4f5;--border:#d5dcde;
+--hairline:rgba(19,26,28,.09);--text:#131a1c;--text-2:#4d585b;--text-3:#7b878a;--accent:#0e5f73;
+--ok:#1a7f4b;--warn:#c98a12;--high:#d0622f;--crit:#b0302a;--rail:#16262b;--radius:4px}
+@media (prefers-color-scheme:dark){:root{--plane:#0d1315;--surface:#151e21;--surface-2:#1b262a;
+--border:#29383d;--hairline:rgba(255,255,255,.08);--text:#e7eef0;--text-2:#a4b2b6;--text-3:#78868a;
+--accent:#5ebdd3;--ok:#2f9459;--warn:#c9a52f;--high:#cf6435;--crit:#d4462f;--rail:#0a1113}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--text);font:14px/1.45 "Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+.mono,code{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.num{font-variant-numeric:tabular-nums}
+a{color:var(--accent)}
+.app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+.rail{background:var(--rail);color:#cfdadd;padding:0;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{padding:18px;border-bottom:1px solid rgba(255,255,255,.08)}
+.brand b{display:block;letter-spacing:.13em;color:#fff;font-size:15px}
+.brand span{font-size:11px;color:#8fa2a7}
+.nav{padding:10px}
+.nav a{display:flex;gap:8px;padding:7px 9px;border-radius:3px;color:#cfdadd;text-decoration:none;font-size:13.5px}
+.nav a:hover{background:rgba(255,255,255,.06)}
+.nav a[aria-current]{background:rgba(255,255,255,.1);color:#fff;font-weight:600}
+.nav .c{margin-left:auto;font-size:11px;background:rgba(255,255,255,.1);border-radius:9px;padding:1px 6px}
+.main{min-width:0;padding:22px}
+h1{font-size:21px;margin:0 0 4px}
+h2{font-size:13.5px;margin:0}
+p.lede{color:var(--text-2);margin:0 0 18px;max-width:70ch}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px}
+.card-head{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center}
+.card-head .hint{margin-left:auto;font-size:11.5px;color:var(--text-3)}
+.card-body{padding:16px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:14px}
+@media(max-width:1000px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.app{grid-template-columns:1fr}.rail{position:static;height:auto}}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.tile .l{font-size:11.5px;color:var(--text-2)}
+.tile .v{font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.1;margin-top:4px}
+.tile .s{font-size:12px;color:var(--text-3);margin-top:5px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+.wrap{overflow-x:auto}
+th{text-align:left;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-3);
+font-weight:700;padding:9px 12px;border-bottom:1px solid var(--border);background:var(--surface-2);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--hairline);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.right{text-align:right}.nowrap{white-space:nowrap}.muted{color:var(--text-3)}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 7px;border-radius:3px;
+border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);white-space:nowrap}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+.chip.warn{border-color:var(--warn);color:var(--warn)}
+.chip.high{border-color:var(--high);color:var(--high)}
+.chip.crit{border-color:var(--crit);color:var(--crit)}
+.meter{height:6px;border-radius:3px;background:var(--surface-2);display:flex;overflow:hidden;margin-top:8px}
+.meter i{display:block}
+.bar-ok{background:var(--ok)}.bar-crit{background:var(--crit);box-shadow:-2px 0 0 var(--surface)}
+form.inline{display:flex;gap:6px;align-items:center}
+select,input[type=search]{padding:5px 8px;border:1px solid var(--border);border-radius:3px;
+background:var(--surface-2);color:var(--text);font:inherit;font-size:13px}
+button{padding:5px 11px;border:1px solid var(--accent);background:var(--accent);color:var(--surface);
+border-radius:3px;font:inherit;font-size:13px;cursor:pointer}
+.foot{color:var(--text-3);font-size:11.5px;padding:14px 0}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--hairline);font-size:13px}
+.kv:last-child{border-bottom:0}
+.prov{font-size:11px;color:var(--text-3)}
+.conflict{color:var(--crit);font-size:11.5px}
+.empty{padding:40px 16px;text-align:center;color:var(--text-3)}
+.navsep{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#8fa2a7;padding:14px 9px 5px;font-weight:600}
+.flash{padding:11px 14px;border-radius:var(--radius);margin-bottom:14px;font-size:13px;
+border:1px solid var(--ok);color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.flash.err{border-color:var(--crit);color:var(--crit);background:color-mix(in srgb,var(--crit) 10%,transparent)}
+label{display:block;font-size:11.5px;color:var(--text-2);margin-bottom:4px}
+input[type=text],input[type=file]{padding:6px 9px;border:1px solid var(--border);border-radius:3px;
+background:var(--surface-2);color:var(--text);font:inherit;font-size:13px;width:100%}
+.formrow{margin-bottom:12px}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.btn-sec{background:var(--surface-2);color:var(--text);border-color:var(--border)}
+.btn-danger{background:transparent;color:var(--crit);border-color:var(--crit)}
+.grouphdr td{background:var(--surface-2);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+color:var(--text-3);font-weight:700}
+.hint{font-size:11.5px;color:var(--text-3);margin-top:4px}
+</style></head><body>
+<div class="app">
+<aside class="rail">
+  <div class="brand"><b>ENCLAVE</b><span>Asset Inventory &amp; Assurance</span></div>
+  <nav class="nav">
+    <a href="/" {{if eq .Page "overview"}}aria-current="page"{{end}}>Overview</a>
+    <a href="/hosts" {{if eq .Page "hosts"}}aria-current="page"{{end}}>Hosts <span class="c num">{{.LiveHosts}}</span></a>
+    <a href="/unassigned" {{if eq .Page "unassigned"}}aria-current="page"{{end}}>Unassigned <span class="c num">{{.NavUnassigned}}</span></a>
+    <a href="/conflicts" {{if eq .Page "conflicts"}}aria-current="page"{{end}}>Conflicts <span class="c num">{{.NavConflicts}}</span></a>
+    <div class="navsep">Setup</div>
+    <a href="/import" {{if or (eq .Page "import") (eq .Page "import-map")}}aria-current="page"{{end}}>Import data</a>
+    <a href="/enclaves" {{if eq .Page "enclaves"}}aria-current="page"{{end}}>Enclaves</a>
+  </nav>
+</aside>
+<main class="main">
+{{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
+{{if .FlashErr}}<div class="flash err">{{.FlashErr}}</div>{{end}}
+
+{{if eq .Page "overview"}}
+  <h1>Overview</h1>
+  <p class="lede">Every value below is reconciled from the observation log. Open any host to see which feed supplied which field.</p>
+  <div class="grid">
+    <div class="tile"><div class="l">Live hosts</div><div class="v num">{{.LiveHosts}}</div>
+      <div class="s">from {{.Obs}} observations</div></div>
+    <div class="tile"><div class="l">Unassigned to an enclave</div><div class="v num">{{len .Unassigned}}</div>
+      <div class="s"><a href="/unassigned">Open claim queue</a></div></div>
+    <div class="tile"><div class="l">Hosts with feed conflicts</div><div class="v num">{{len .Conflicts}}</div>
+      <div class="s"><a href="/conflicts">Review disagreements</a></div></div>
+    <div class="tile"><div class="l">Last rebuild</div><div class="v" style="font-size:15px;font-weight:500">{{ago .Built}}</div>
+      <div class="s">replayed from the log</div></div>
+  </div>
+
+  <div class="card"><div class="card-head"><h2>Coverage by enclave</h2>
+    <span class="hint">Green is meeting all controls &mdash; more green is better</span></div>
+    <div class="wrap"><table>
+      <thead><tr><th>Enclave</th><th>Owner</th><th class="right">Hosts</th><th class="right">Affected</th>
+      <th style="width:160px">Share affected</th>
+      {{range .Controls}}<th class="right">{{.Label}}</th>{{end}}</tr></thead>
+      <tbody>{{range .Enclaves}}<tr>
+        <td><b>{{.Enclave.ID}}</b> <span class="muted">{{.Enclave.Name}}</span></td>
+        <td class="muted">{{.Enclave.Owner}}</td>
+        <td class="right num">{{.Hosts}}</td>
+        <td class="right num"><b>{{.Affected}}</b></td>
+        <td><div class="meter"><i class="bar-ok" style="width:{{sub100 .Percent}}%"></i><i class="bar-crit" style="width:{{.Percent}}%"></i></div>
+          <span class="muted num" style="font-size:11.5px">{{.Percent}}%</span></td>
+        {{range .Results}}<td class="right num nowrap">
+          {{if eq .Eligible 0}}<span class="muted">n/a</span>
+          {{else}}<span class="chip {{band .OverTarget}}">{{.Percent}}%</span>
+            <span class="muted" style="font-size:11px">{{.Missing}}/{{.Eligible}}</span>{{end}}</td>{{end}}
+      </tr>{{else}}<tr><td colspan="9"><div class="empty">No enclaves defined yet.</div></td></tr>{{end}}</tbody>
+    </table></div>
+  </div>
+{{end}}
+
+{{if eq .Page "hosts"}}
+  <h1>Hosts</h1>
+  <p class="lede">One record per asset, merged across every feed that reported it.</p>
+  <form class="inline" method="get" action="/hosts" style="margin-bottom:12px">
+    <input type="search" name="q" placeholder="Filter hosts…" value="{{.Query}}">
+    <button type="submit">Filter</button>
+  </form>
+  <div class="card"><div class="wrap"><table>
+    <thead><tr><th>Host</th><th>IP</th><th>Operating system</th><th>Enclave</th><th>Agent</th>
+      <th class="right">Sources</th><th class="right">Last seen</th></tr></thead>
+    <tbody>{{range .Hosts}}<tr>
+      <td class="mono"><a href="/host/{{.ID}}">{{.DisplayName}}</a>
+        {{if not .Named}}<span class="chip">MAC</span>{{end}}
+        {{if hasConflict .Fields}}<span class="chip crit">conflict</span>{{end}}</td>
+      <td class="mono muted">{{.Field "ip"}}</td>
+      <td>{{.Field "os"}}</td>
+      <td>{{if .EnclaveID}}<span class="chip">{{.EnclaveID}}</span>{{else}}<span class="chip crit">unassigned</span>{{end}}</td>
+      <td class="muted">{{.Field "edr_status"}}</td>
+      <td class="right num">{{len .Sources}}</td>
+      <td class="right muted nowrap">{{ago .LastSeen}}</td>
+    </tr>{{else}}<tr><td colspan="7"><div class="empty">No hosts. Import a feed to get started.</div></td></tr>{{end}}</tbody>
+  </table></div></div>
+{{end}}
+
+{{if eq .Page "host"}}
+  <p><a href="/hosts">&larr; All hosts</a></p>
+  <h1 class="mono">{{.Host.DisplayName}}</h1>
+  <p class="lede">{{if .Host.EnclaveID}}{{.Host.EnclaveID}}{{else}}No enclave matched this address{{end}}
+    &middot; first seen {{ago .Host.FirstSeen}} &middot; last seen {{ago .Host.LastSeen}}</p>
+  <div class="card"><div class="card-head"><h2>Fields and provenance</h2>
+    <span class="hint">Each value shows the feed it came from</span></div>
+    <div class="wrap"><table>
+      <thead><tr><th>Field</th><th>Value</th><th>Source</th><th>Disagreements</th></tr></thead>
+      <tbody>{{range sortedFields .Host.Fields}}<tr>
+        <td class="muted">{{.Name}}</td>
+        <td><b>{{.Value.Value}}</b></td>
+        <td class="muted">{{.Value.Source}} <span class="prov">{{ago .Value.CollectedAt}}</span></td>
+        <td>{{range .Value.Conflicts}}<div class="conflict">{{.Value}} &mdash; {{.Source}}</div>{{else}}<span class="muted">&mdash;</span>{{end}}</td>
+      </tr>{{end}}</tbody>
+    </table></div>
+  </div>
+  <div class="card"><div class="card-head"><h2>Identifiers</h2><span class="hint">What the merge was made on</span></div>
+    <div class="card-body">{{range .Host.Identifiers}}<div class="kv"><span class="muted">{{.Kind}}</span><span class="mono">{{.Value}}</span></div>{{end}}</div>
+  </div>
+{{end}}
+
+{{if eq .Page "unassigned"}}
+  <h1>Unassigned devices</h1>
+  <p class="lede">Devices whose address matched no enclave range. Until one is assigned it has no owner,
+    no impact rating and no control framework, so nobody is accountable for it.</p>
+  <div class="card"><div class="wrap"><table>
+    <thead><tr><th>Host</th><th>IP</th><th>Operating system</th><th class="right">Assign to</th></tr></thead>
+    <tbody>{{range .Unassigned}}<tr>
+      <td class="mono"><a href="/host/{{.ID}}">{{.DisplayName}}</a></td>
+      <td class="mono muted">{{.Field "ip"}}</td>
+      <td>{{.Field "os"}}</td>
+      <td class="right"><form class="inline" method="post" action="/assign" style="justify-content:flex-end">
+        <input type="hidden" name="host" value="{{.ID}}">
+        <select name="enclave">{{range $.Enclaves}}<option value="{{.Enclave.ID}}">{{.Enclave.ID}}</option>{{end}}</select>
+        <button type="submit">Assign</button>
+      </form></td>
+    </tr>{{else}}<tr><td colspan="4"><div class="empty">Nothing unassigned. Every device belongs to an enclave.</div></td></tr>{{end}}</tbody>
+  </table></div></div>
+{{end}}
+
+{{if eq .Page "conflicts"}}
+  <h1>Feed conflicts</h1>
+  <p class="lede">Where two feeds assert different values for the same field. The winner is decided by the
+    precedence policy; the loser is kept here rather than discarded, so a wrong record can be proven wrong.</p>
+  <div class="card"><div class="wrap"><table>
+    <thead><tr><th>Host</th><th>Field</th><th>Winning value</th><th>Rejected</th></tr></thead>
+    <tbody>{{range .Conflicts}}{{$h := .}}{{range sortedFields .Fields}}{{if .Value.Conflicts}}<tr>
+      <td class="mono"><a href="/host/{{$h.ID}}">{{$h.DisplayName}}</a></td>
+      <td class="muted">{{.Name}}</td>
+      <td><b>{{.Value.Value}}</b> <span class="prov">{{.Value.Source}}</span></td>
+      <td>{{range .Value.Conflicts}}<div class="conflict">{{.Value}} &mdash; {{.Source}}</div>{{end}}</td>
+    </tr>{{end}}{{end}}{{else}}<tr><td colspan="4"><div class="empty">No feed disagreements.</div></td></tr>{{end}}</tbody>
+  </table></div></div>
+{{end}}
+
+
+{{if eq .Page "import"}}
+  <h1>Import data</h1>
+  <p class="lede">Upload a CSV export from any tool. You will map its columns on the next screen —
+    nothing is written until you confirm.</p>
+
+  <div class="card"><div class="card-head"><h2>Upload a file</h2></div>
+    <div class="card-body">
+      <form method="post" action="/import/upload" enctype="multipart/form-data">
+        <div class="formrow">
+          <label for="file">CSV file (10 MB max)</label>
+          <input type="file" name="file" id="file" accept=".csv,text/csv" required>
+          <div class="hint">From Excel, save as <b>CSV UTF-8 (Comma delimited)</b> — not "Unicode Text".</div>
+        </div>
+        {{if .Mappings}}<div class="formrow">
+          <label for="mapping">Reuse a saved mapping</label>
+          <select name="mapping" id="mapping">
+            <option value="">Start fresh — guess the columns for me</option>
+            {{range .Mappings}}<option value="{{.Name}}">{{.Name}} ({{.SourceID}} · {{.SourceKind}})</option>{{end}}
+          </select>
+        </div>{{end}}
+        <button type="submit">Upload and map columns</button>
+      </form>
+    </div>
+  </div>
+
+  {{if .Mappings}}<div class="card"><div class="card-head"><h2>Saved mappings</h2>
+    <span class="hint">Describe a feed once, reuse it every collection</span></div>
+    <div class="wrap"><table>
+      <thead><tr><th>Name</th><th>Source</th><th>Type</th><th class="right">Columns</th><th></th></tr></thead>
+      <tbody>{{range .Mappings}}<tr>
+        <td><b>{{.Name}}</b></td><td class="mono">{{.SourceID}}</td><td class="muted">{{.SourceKind}}</td>
+        <td class="right num">{{len .Columns}}</td>
+        <td class="right"><form method="post" action="/mappings/delete" class="inline" style="justify-content:flex-end">
+          <input type="hidden" name="name" value="{{.Name}}">
+          <button type="submit" class="btn-danger">Remove</button></form></td>
+      </tr>{{end}}</tbody>
+    </table></div>
+  </div>{{end}}
+
+  <div class="card"><div class="card-head"><h2>Import history</h2></div>
+    <div class="wrap"><table>
+      <thead><tr><th>When</th><th>File</th><th>Source</th><th>Type</th><th class="right">Rows</th></tr></thead>
+      <tbody>{{range .Imports}}<tr>
+        <td class="muted nowrap">{{ago .At}}</td><td class="mono">{{.Filename}}</td>
+        <td class="mono">{{.SourceID}}</td><td class="muted">{{.SourceKind}}</td>
+        <td class="right num">{{.Observations}}</td>
+      </tr>{{else}}<tr><td colspan="5"><div class="empty">Nothing imported yet.</div></td></tr>{{end}}</tbody>
+    </table></div>
+  </div>
+{{end}}
+
+{{if eq .Page "import-map"}}
+  <h1>Map columns</h1>
+  <p class="lede"><b>{{.Filename}}</b> — {{len .Headers}} columns.
+    Point each one at what it means. Anything left blank is ignored.</p>
+
+  <div class="card"><div class="card-head"><h2>First rows in your file</h2>
+    <span class="hint">So you can see what each column actually holds</span></div>
+    <div class="wrap"><table>
+      <thead><tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr></thead>
+      <tbody>{{range .SampleRows}}<tr>{{range .}}<td class="muted">{{.}}</td>{{end}}</tr>{{end}}</tbody>
+    </table></div>
+  </div>
+
+  <form method="post" action="/import/commit">
+    <input type="hidden" name="stage" value="{{.StageID}}">
+    <div class="card"><div class="card-head"><h2>Where did this come from?</h2></div>
+      <div class="card-body"><div class="formgrid">
+        <div><label for="source_id">Source name</label>
+          <input type="text" name="source_id" id="source_id" value="{{.SourceID}}" required>
+          <div class="hint">e.g. <span class="mono">falcon-prod</span>. Reuse it for later collections from the same tool.</div></div>
+        <div><label for="source_kind">Source type</label>
+          <select name="source_kind" id="source_kind" style="width:100%">
+            {{$k := .SourceKind}}{{range .Kinds}}<option value="{{.ID}}" {{if eq .ID $k}}selected{{end}}>{{.Label}}</option>{{end}}
+          </select>
+          <div class="hint">This decides which feed wins when two disagree.</div></div>
+      </div></div>
+    </div>
+
+    <div class="card"><div class="card-head"><h2>Column mapping</h2>
+      <span class="hint">Pre-filled from your headers where the name was obvious</span></div>
+      <div class="wrap"><table>
+        <thead><tr><th style="width:280px">Means</th><th>Column in your file</th></tr></thead>
+        <tbody>
+        {{$hdrs := .Headers}}{{$grp := ""}}
+        {{range .MapRows}}
+          {{if ne .Group $grp}}<tr class="grouphdr"><td colspan="2">{{.Group}}{{if eq .Group "Identifiers"}} — at least one is required{{end}}</td></tr>{{$grp = .Group}}{{end}}
+          <tr><td>{{.Label}}</td>
+            <td><select name="col_{{.Key}}" style="width:100%">
+              <option value="">— not in this file —</option>
+              {{$sel := .Selected}}{{range $hdrs}}<option value="{{.}}" {{if eq . $sel}}selected{{end}}>{{.}}</option>{{end}}
+            </select></td></tr>
+        {{end}}
+        </tbody>
+      </table></div>
+      <div class="card-body" style="border-top:1px solid var(--border)">
+        <div class="formrow" style="max-width:340px">
+          <label for="save_as">Save this mapping for next time (optional)</label>
+          <input type="text" name="save_as" id="save_as" placeholder="e.g. CrowdStrike monthly export">
+        </div>
+        <button type="submit">Import</button>
+        <a href="/import" style="margin-left:10px">Cancel</a>
+      </div>
+    </div>
+  </form>
+{{end}}
+
+{{if eq .Page "enclaves"}}
+  <h1>Enclaves</h1>
+  <p class="lede">A network segment with an owner. Hosts are placed automatically by matching their
+    address against these ranges; the longest matching prefix wins.</p>
+
+  <div class="card"><div class="card-head"><h2>{{if .Edit}}Edit {{.Edit.ID}}{{else}}Add an enclave{{end}}</h2>
+    {{if .Edit}}<span class="hint"><a href="/enclaves">Cancel and add a new one instead</a></span>{{end}}</div>
+    <div class="card-body">
+      <form method="post" action="/enclaves/save">
+        <div class="formgrid">
+          <div><label for="id">Identifier</label>
+            <input type="text" name="id" id="id" value="{{with .Edit}}{{.ID}}{{end}}"
+                   placeholder="CORP-CORE" {{if .Edit}}readonly{{end}} required></div>
+          <div><label for="name">Name</label>
+            <input type="text" name="name" id="name" value="{{with .Edit}}{{.Name}}{{end}}" placeholder="Core Enterprise Services"></div>
+          <div><label for="owner">Accountable owner</label>
+            <input type="text" name="owner" id="owner" value="{{with .Edit}}{{.Owner}}{{end}}" placeholder="D. Rennick"></div>
+        </div>
+        <div class="formrow" style="margin-top:12px">
+          <label for="cidrs">Address ranges</label>
+          <input type="text" name="cidrs" id="cidrs" value="{{with .Edit}}{{joinCIDRs .CIDRs}}{{end}}"
+                 placeholder="10.12.0.0/16, 10.13.0.0/16" required>
+          <div class="hint">Comma separated. Checked when you save — a typo here would silently stop matching hosts.</div>
+        </div>
+        <div class="formgrid">
+          <div><label for="impact">Impact</label>
+            <select name="impact" id="impact" style="width:100%">
+              {{$i := ""}}{{with .Edit}}{{$i = .Impact}}{{end}}
+              <option {{if eq $i "Low"}}selected{{end}}>Low</option>
+              <option {{if eq $i "Moderate"}}selected{{end}}>Moderate</option>
+              <option {{if eq $i "High"}}selected{{end}}>High</option>
+            </select></div>
+          <div><label for="framework">Control framework</label>
+            <select name="framework" id="framework" style="width:100%">
+              {{$f := ""}}{{with .Edit}}{{$f = .Framework}}{{end}}
+              <option value="cis" {{if eq $f "cis"}}selected{{end}}>CIS Controls v8</option>
+              <option value="csf" {{if eq $f "csf"}}selected{{end}}>NIST CSF 2.0</option>
+              <option value="iso" {{if eq $f "iso"}}selected{{end}}>ISO/IEC 27001:2022</option>
+              <option value="nist" {{if eq $f "nist"}}selected{{end}}>NIST SP 800-53 Rev. 5</option>
+            </select></div>
+          <div><label>&nbsp;</label>
+            <label style="display:flex;gap:7px;align-items:center;font-size:13px;color:var(--text)">
+              <input type="checkbox" name="exposed" style="width:auto"
+                {{with .Edit}}{{if .Exposed}}checked{{end}}{{end}}> Publicly exposed</label>
+            <div class="hint">Reachable from an untrusted network.</div></div>
+        </div>
+        <div style="margin-top:14px"><button type="submit">{{if .Edit}}Save changes{{else}}Add enclave{{end}}</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-head"><h2>Defined enclaves</h2>
+    <span class="hint">{{len .AllEnclaves}} total</span></div>
+    <div class="wrap"><table>
+      <thead><tr><th>Identifier</th><th>Name</th><th>Ranges</th><th>Owner</th><th>Impact</th>
+        <th>Exposed</th><th class="right">Hosts</th><th></th></tr></thead>
+      <tbody>{{range .AllEnclaves}}<tr>
+        <td><b>{{.ID}}</b></td><td class="muted">{{.Name}}</td>
+        <td class="mono">{{joinCIDRs .CIDRs}}</td><td class="muted">{{.Owner}}</td>
+        <td class="muted">{{.Impact}}</td>
+        <td>{{if .Exposed}}<span class="chip warn">yes</span>{{else}}<span class="muted">no</span>{{end}}</td>
+        <td class="right num">{{index $.EnclaveCounts .ID}}</td>
+        <td class="right nowrap">
+          <a href="/enclaves?edit={{.ID}}">Edit</a>
+          <form method="post" action="/enclaves/delete" class="inline" style="display:inline">
+            <input type="hidden" name="id" value="{{.ID}}">
+            <button type="submit" class="btn-danger" style="margin-left:6px">Delete</button></form>
+        </td>
+      </tr>{{else}}<tr><td colspan="8"><div class="empty">
+        No enclaves yet. Add one above, then import data — hosts are placed by address range.</div></td></tr>{{end}}</tbody>
+    </table></div>
+  </div>
+{{end}}
+
+<div class="foot">{{.LiveHosts}} live hosts &middot; {{.Obs}} observations replayed &middot; built {{ago .Built}}</div>
+</main></div></body></html>
