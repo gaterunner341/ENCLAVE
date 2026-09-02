@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gaterunner341/enclave/internal/backup"
 	"github.com/gaterunner341/enclave/internal/catalog"
 	"github.com/gaterunner341/enclave/internal/importer"
 	"github.com/gaterunner341/enclave/internal/ingest"
@@ -24,6 +25,29 @@ type harness struct {
 	t *testing.T
 }
 
+// newHarnessEmpty builds a server with nothing in it, which is what a freshly
+// installed build looks like.
+func newHarnessEmpty(t *testing.T) *harness {
+	t.Helper()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cats, err := catalog.NewRegistry(filepath.Join(st.Dir(), "catalogs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	maps, err := mapping.NewRegistry(filepath.Join(st.Dir(), "mappings"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, err := New(st, cats, maps, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &harness{Server: srv, t: t}
+}
+
 // newHarness builds a server over a temporary store seeded with one enclave,
 // one real STIG checklist and one real Nessus export, so that every page has
 // something to render.
@@ -33,11 +57,13 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cats, err := catalog.NewRegistry(t.TempDir())
+	// Catalogues and mappings sit inside the data directory, as they do in a
+	// real install, so that a backup taken in a test carries them.
+	cats, err := catalog.NewRegistry(filepath.Join(st.Dir(), "catalogs"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	maps, err := mapping.NewRegistry(t.TempDir())
+	maps, err := mapping.NewRegistry(filepath.Join(st.Dir(), "mappings"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -621,5 +647,185 @@ func TestPinnedCSVImportCarriesTheAssetThroughTheMappingScreen(t *testing.T) {
 	})
 	if !strings.Contains(rec.Body.String(), `name="asset_id" value="`+a.ID+`"`) {
 		t.Error("the mapping screen dropped the pinned host, so confirming would scatter the rows")
+	}
+}
+
+func TestDataPageExplainsTheUpgradePath(t *testing.T) {
+	h := newHarness(t)
+	rec := h.get("/data")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "could not be rendered") {
+		t.Fatal(truncateBody(body))
+	}
+	for _, want := range []string{
+		"Download a backup", "Restore from a backup", h.Store.Dir(),
+		"Upgrading to a new version",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the data page never mentions %q", want)
+		}
+	}
+	// It is linked from somewhere a person will find it.
+	if !strings.Contains(h.get("/").Body.String(), `href="/data"`) {
+		t.Error("nothing links to the data page")
+	}
+}
+
+func TestBackupDownloadsAndRestores(t *testing.T) {
+	h := newHarness(t)
+	before := h.Store.Counts()
+
+	rec := h.get("/data/backup")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("backup = %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/zip" {
+		t.Errorf("content type = %q", ct)
+	}
+	cd := rec.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, "attachment") || !strings.Contains(cd, "enclave-backup-") {
+		t.Errorf("content disposition = %q", cd)
+	}
+	bundle := rec.Body.Bytes()
+	if len(bundle) == 0 {
+		t.Fatal("the backup is empty")
+	}
+
+	// This is the upgrade: a different install, nothing in it, restore the file.
+	fresh := newHarnessEmpty(t)
+	if fresh.Store.Counts().Enclaves != 0 {
+		t.Fatal("the second instance should start empty")
+	}
+	rec = fresh.upload("/data/restore", "file", "enclave-backup.zip", bundle,
+		map[string]string{"confirm": "REPLACE"})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("restore = %d: %s", rec.Code, truncateBody(rec.Body.String()))
+	}
+	if loc := rec.Header().Get("Location"); strings.Contains(loc, "err=") {
+		t.Fatalf("restore reported an error: %s", loc)
+	}
+
+	after := fresh.Store.Counts()
+	if after.Enclaves != before.Enclaves || after.Assets != before.Assets ||
+		after.Findings != before.Findings {
+		t.Fatalf("records did not come across: got %+v, want %+v", after, before)
+	}
+	// The restore took effect in the running server without a restart.
+	if body := fresh.get("/enclaves").Body.String(); !strings.Contains(body, "Core Operations") {
+		t.Error("the pages are still serving what was there before the restore")
+	}
+	// And the gap analysis works against the restored data, which needs the
+	// catalogues and mappings to have come back too.
+	if body := fresh.get("/enclaves/CORE/baseline").Body.String(); strings.Contains(body, "could not be rendered") {
+		t.Fatalf("the baseline page failed after a restore: %s", truncateBody(body))
+	}
+}
+
+func TestRestoreNeedsConfirmationAndAValidFile(t *testing.T) {
+	h := newHarness(t)
+	bundle := h.get("/data/backup").Body.Bytes()
+	before := h.Store.Counts()
+
+	// No confirmation.
+	rec := h.upload("/data/restore", "file", "b.zip", bundle, nil)
+	if !strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Error("a restore without confirmation should be refused")
+	}
+	// Wrong word.
+	rec = h.upload("/data/restore", "file", "b.zip", bundle, map[string]string{"confirm": "yes"})
+	if !strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Error("a restore confirmed with the wrong word should be refused")
+	}
+	// Not a bundle.
+	rec = h.upload("/data/restore", "file", "b.zip", []byte("not a zip"),
+		map[string]string{"confirm": "REPLACE"})
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "err=") || !strings.Contains(loc, "Nothing+was+changed") {
+		t.Errorf("a bad file should be refused and say nothing changed, got %q", loc)
+	}
+	if h.Store.Counts() != before {
+		t.Error("a refused restore changed the data")
+	}
+}
+
+func TestSnapshotAndSavedBundleDownload(t *testing.T) {
+	h := newHarness(t)
+	if rec := h.post("/data/snapshot", nil); rec.Code != http.StatusSeeOther {
+		t.Fatalf("snapshot = %d", rec.Code)
+	}
+	page := h.get("/data").Body.String()
+	if !strings.Contains(page, "before-restore-") && !strings.Contains(page, ".zip") {
+		t.Error("the saved copy is not listed on the data page")
+	}
+	names := backup.List(h.Store.Dir())
+	if len(names) != 1 {
+		t.Fatalf("expected one saved bundle, got %v", names)
+	}
+	rec := h.get("/data/backups/" + names[0])
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/zip" {
+		t.Errorf("downloading a saved bundle = %d %q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	// A name that tries to escape the backups folder is refused.
+	for _, bad := range []string{"..%2f..%2fetc%2fpasswd", "not-a-zip.txt"} {
+		if code := h.get("/data/backups/" + bad).Code; code == http.StatusOK {
+			t.Errorf("serving %q should not have worked", bad)
+		}
+	}
+}
+
+func TestReadOnlyAllowsBackupButNotRestore(t *testing.T) {
+	h := newHarness(t)
+	bundle := h.get("/data/backup").Body.Bytes()
+	h.ReadOnly = true
+
+	// Taking a copy changes nothing, so it stays available.
+	if code := h.get("/data/backup").Code; code != http.StatusOK {
+		t.Errorf("read-only mode blocked taking a backup: %d", code)
+	}
+	if code := h.get("/data").Code; code != http.StatusOK {
+		t.Errorf("read-only mode blocked the data page: %d", code)
+	}
+	// Replacing everything does not.
+	rec := h.upload("/data/restore", "file", "b.zip", bundle, map[string]string{"confirm": "REPLACE"})
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("restore in read-only mode = %d, want 403", rec.Code)
+	}
+	if code := h.post("/data/snapshot", nil).Code; code != http.StatusForbidden {
+		t.Errorf("snapshot in read-only mode = %d, want 403", code)
+	}
+}
+
+func TestRestoreCarriesImportedCatalogsAndMappings(t *testing.T) {
+	h := newHarness(t)
+	// Load an organisation's own framework and a crosswalk into it, which are
+	// exactly the things that are not recoverable from a scan.
+	cat := []byte("@id acme\n@name ACME Standard\n@family HD = Hardening\nHD-1 | Approved base image |\n")
+	if rec := h.upload("/catalogs/import", "file", "acme.catalog", cat, nil); rec.Code != http.StatusSeeOther {
+		t.Fatalf("catalog import = %d", rec.Code)
+	}
+	xwalk := []byte("#name,To ACME\n#id,acme-xwalk\n#scheme,control\n#target,acme\nkey,controls\nCM-6,HD-1\n")
+	if rec := h.upload("/mappings/import", "file", "acme-xwalk.csv", xwalk, nil); rec.Code != http.StatusSeeOther {
+		t.Fatalf("mapping import = %d", rec.Code)
+	}
+
+	bundle := h.get("/data/backup").Body.Bytes()
+	fresh := newHarnessEmpty(t)
+	rec := fresh.upload("/data/restore", "file", "b.zip", bundle, map[string]string{"confirm": "REPLACE"})
+	if strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("restore failed: %s", rec.Header().Get("Location"))
+	}
+
+	if _, ok := fresh.Catalogs.Get("acme"); !ok {
+		t.Error("the imported catalogue did not survive the move to a new install")
+	}
+	if _, ok := fresh.Mappings.Get("acme-xwalk"); !ok {
+		t.Error("the imported mapping did not survive the move to a new install")
+	}
+	// And they are live, not merely on disk.
+	if body := fresh.get("/catalogs").Body.String(); !strings.Contains(body, "ACME Standard") {
+		t.Error("the restored catalogue is not being served")
 	}
 }

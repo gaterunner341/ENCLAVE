@@ -163,12 +163,27 @@ HD-2    | Unused services removed     | core,ext
 
 A CSV with `id` and `title` columns works too, as does an OSCAL catalog in JSON.
 
+## Upgrading
+
+Open **Data**, click **Download a backup**, start the new build, and restore the
+file on its Data page. That carries the enclaves, assets, findings, imports,
+control assessments and risk entries, along with any catalogues and mapping
+tables you loaded. On a terminal it is `enclave backup -o file.zip` and then
+`enclave restore file.zip`.
+
+The data folder records which layout wrote it. A newer build reads older data
+and upgrades it; an older build handed newer data refuses and says which version
+wrote it, rather than reading half of it. The same check runs on a backup file
+before anything is written, and whatever a restore replaces is saved to
+`enclave-data/backups/` first.
+
 ## Documentation
 
 - **[RUN.md](RUN.md)** — how to run it, the first five minutes, every command
 - [docs/importing.md](docs/importing.md) — what is read from each file format, and the asset and finding identity rules
 - [docs/mappings.md](docs/mappings.md) — how findings reach controls, the CCI list, crosswalks between frameworks
 - [docs/risk-scoring.md](docs/risk-scoring.md) — exactly how the numbers are produced, and what they are not
+- [docs/data.md](docs/data.md) — the data folder, backups, restores and schema versions
 
 ## Layout
 

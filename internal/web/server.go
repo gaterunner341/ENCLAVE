@@ -124,6 +124,12 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /mappings/{mid}/delete", s.handleMappingDelete)
 	m.HandleFunc("POST /mappings/reannotate", s.handleReannotate)
 
+	m.HandleFunc("GET /data", s.handleData)
+	m.HandleFunc("GET /data/backup", s.handleBackup)
+	m.HandleFunc("POST /data/restore", s.handleRestore)
+	m.HandleFunc("POST /data/snapshot", s.handleSnapshot)
+	m.HandleFunc("GET /data/backups/{name}", s.handleSavedBundle)
+
 	m.HandleFunc("GET /reports", s.handleReports)
 	m.HandleFunc("GET /export/{kind}", s.handleExportCSV)
 	m.HandleFunc("GET /api/{kind}", s.handleAPI)

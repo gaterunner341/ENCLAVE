@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -223,5 +224,97 @@ func TestImportCanBePinnedToAnAssetFromTheCommandLine(t *testing.T) {
 	// than quietly falling back to matching.
 	if _, err := capture(t, dir, "import", "--enclave", "CORE", "--asset", "nope", ckl); err == nil {
 		t.Error("--asset with an unknown identifier should be refused")
+	}
+}
+
+func TestBackupAndRestoreMoveDataToANewInstall(t *testing.T) {
+	old := t.TempDir()
+	if _, err := capture(t, old, "enclave", "add", "--id", "CORE", "--name", "Core Operations",
+		"--cidr", "10.20.0.0/16", "--baseline", "nist-800-53r5:moderate"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := capture(t, old, "import", "--enclave", "CORE",
+		filepath.Join("..", "..", "testdata", "sample.ckl")); err != nil {
+		t.Fatal(err)
+	}
+
+	bundle := filepath.Join(t.TempDir(), "backup.zip")
+	if _, err := capture(t, old, "backup", "-o", bundle); err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+	info, err := os.Stat(bundle)
+	if err != nil || info.Size() == 0 {
+		t.Fatalf("the backup file is missing or empty: %v", err)
+	}
+
+	// The upgrade: a different folder, nothing in it.
+	fresh := t.TempDir()
+	out, err := capture(t, fresh, "restore", bundle)
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if !strings.Contains(out, "restored") {
+		t.Errorf("restore said %q", out)
+	}
+	list, err := capture(t, fresh, "enclave", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(list, "Core Operations") {
+		t.Errorf("the enclave did not come across:\n%s", list)
+	}
+	findings, _ := capture(t, fresh, "export", "findings")
+	if n := strings.Count(strings.TrimSpace(findings), "\n"); n != 3 {
+		t.Errorf("expected 3 findings after the restore, got %d", n)
+	}
+}
+
+func TestRestoreOverExistingDataNeedsConfirming(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := capture(t, dir, "enclave", "add", "--id", "CORE", "--name", "Core"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := capture(t, dir, "import", "--enclave", "CORE",
+		filepath.Join("..", "..", "testdata", "sample.ckl")); err != nil {
+		t.Fatal(err)
+	}
+	bundle := filepath.Join(t.TempDir(), "backup.zip")
+	if _, err := capture(t, dir, "backup", "-o", bundle); err != nil {
+		t.Fatal(err)
+	}
+
+	other := t.TempDir()
+	if _, err := capture(t, other, "enclave", "add", "--id", "OTHER", "--name", "Somewhere else"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := capture(t, other, "restore", bundle); err == nil {
+		t.Error("restoring over existing data should stop and ask")
+	}
+	list, _ := capture(t, other, "enclave", "list")
+	if !strings.Contains(list, "OTHER") {
+		t.Error("the refused restore changed the data anyway")
+	}
+	if _, err := capture(t, other, "restore", "--yes", bundle); err != nil {
+		t.Fatalf("--yes should go ahead: %v", err)
+	}
+	list, _ = capture(t, other, "enclave", "list")
+	if strings.Contains(list, "OTHER") || !strings.Contains(list, "Core") {
+		t.Errorf("the restore did not replace the data:\n%s", list)
+	}
+}
+
+func TestBackupOfAnEmptyInstallSaysSo(t *testing.T) {
+	if _, err := capture(t, t.TempDir(), "backup", "-o", filepath.Join(t.TempDir(), "x.zip")); err == nil {
+		t.Error("backing up an empty install should report there is nothing to back up")
+	}
+}
+
+func TestRestoreNeedsExactlyOneFile(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := capture(t, dir, "restore"); err == nil {
+		t.Error("restore with no file should be an error")
+	}
+	if _, err := capture(t, dir, "restore", "a.zip", "b.zip"); err == nil {
+		t.Error("restore with two files should be an error")
 	}
 }

@@ -47,6 +47,13 @@ func (s *Server) funcs() template.FuncMap {
 			return float64(n) / float64(total) * 100
 		},
 		"num": func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) },
+		// kb rounds a byte count up, so a small file never reads as 0 KB.
+		"kb": func(bytes int64) int {
+			if bytes <= 0 {
+				return 0
+			}
+			return int((bytes + 1023) / 1024)
+		},
 		"comma": func(n int) string {
 			s := strconv.Itoa(n)
 			if n < 0 {

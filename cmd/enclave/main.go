@@ -10,6 +10,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"errors"
@@ -28,6 +29,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gaterunner341/enclave/internal/backup"
 	"github.com/gaterunner341/enclave/internal/catalog"
 	"github.com/gaterunner341/enclave/internal/importer"
 	"github.com/gaterunner341/enclave/internal/ingest"
@@ -52,6 +54,9 @@ func main() {
 }
 
 func run(args []string) error {
+	// Stamps written into the data directory name the build that wrote them,
+	// which is the first thing worth knowing when data will not open.
+	store.BuildVersion = version
 	cmd := "serve"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		cmd, args = args[0], args[1:]
@@ -65,6 +70,10 @@ func run(args []string) error {
 		return cmdExport(args)
 	case "enclave":
 		return cmdEnclave(args)
+	case "backup":
+		return cmdBackup(args)
+	case "restore":
+		return cmdRestore(args)
 	case "version", "--version", "-v":
 		fmt.Fprintln(stdout, "ENCLAVE "+version)
 		return nil
@@ -87,10 +96,13 @@ func usage() {
   enclave export KIND [--enclave ID]          write assets, findings, baseline or risks as CSV
   enclave enclave add --id ID --name NAME     create an enclave
   enclave enclave list                        list enclaves
+  enclave backup [-o FILE]                    write everything to one file
+  enclave restore FILE                        replace everything from one file
   enclave version
 
 The data directory defaults to "enclave-data" beside the executable. Copy that
-folder to back everything up; delete it to start over.
+folder to back everything up, or use the backup and restore commands to move it
+into a new version. Delete it to start over.
 `)
 }
 
@@ -359,6 +371,91 @@ func (w *stdoutRecorder) Header() http.Header {
 }
 func (w *stdoutRecorder) Write(b []byte) (int, error) { return stdout.Write(b) }
 func (w *stdoutRecorder) WriteHeader(code int)        { w.status = code }
+
+func cmdBackup(args []string) error {
+	fs := flag.NewFlagSet("backup", flag.ContinueOnError)
+	dir := fs.String("data", "", "data directory")
+	out := fs.String("o", "", "write here instead of standard output")
+	rest, err := parseFlags(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(rest) == 1 && *out == "" {
+		*out = rest[0]
+	} else if len(rest) > 0 {
+		return fmt.Errorf("backup takes at most one output file")
+	}
+	resolved, err := dataDir(*dir)
+	if err != nil {
+		return err
+	}
+	var w io.Writer = stdout
+	if *out != "" {
+		f, err := os.Create(*out)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		w = f
+	}
+	man, err := backup.Write(resolved, w, version)
+	if err != nil {
+		return err
+	}
+	if *out != "" {
+		fmt.Fprintf(os.Stderr, "wrote %s: %s\n", *out, man.Describe())
+	}
+	return nil
+}
+
+func cmdRestore(args []string) error {
+	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
+	dir := fs.String("data", "", "data directory")
+	yes := fs.Bool("yes", false, "do not ask before replacing what is there")
+	rest, err := parseFlags(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(rest) != 1 {
+		return fmt.Errorf("give exactly one backup file to restore")
+	}
+	resolved, err := dataDir(*dir)
+	if err != nil {
+		return err
+	}
+	body, err := os.ReadFile(rest[0])
+	if err != nil {
+		return err
+	}
+	man, err := backup.Inspect(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "%s contains: %s\n", rest[0], man.Describe())
+
+	// Replacing somebody's records is not something to do because a command
+	// was mistyped, so it is confirmed unless the caller said not to ask.
+	if !*yes {
+		existing, _ := store.Open(resolved)
+		if existing != nil {
+			if c := existing.Counts(); c.Enclaves > 0 || c.Findings > 0 {
+				fmt.Fprintf(os.Stderr,
+					"%s already holds %d enclaves and %d findings, and restoring replaces all of it.\n"+
+						"Re-run with --yes to go ahead.\n", resolved, c.Enclaves, c.Findings)
+				return fmt.Errorf("stopped without changing anything")
+			}
+		}
+	}
+	res, err := backup.Restore(resolved, bytes.NewReader(body), int64(len(body)), version)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "restored %s into %s\n", res.Manifest.Describe(), resolved)
+	if res.Replaced != "" {
+		fmt.Fprintf(stdout, "what was there was saved as %s\n", res.Replaced)
+	}
+	return nil
+}
 
 func cmdEnclave(args []string) error {
 	fs := flag.NewFlagSet("enclave", flag.ContinueOnError)

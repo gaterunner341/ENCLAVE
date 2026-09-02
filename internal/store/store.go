@@ -73,10 +73,49 @@ func Open(dir string) (*Store, error) {
 		fingerprints:      map[string]string{},
 		dirty:             map[string]bool{},
 	}
+	if err := prepare(dir); err != nil {
+		return nil, err
+	}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+// Reload re-reads every collection from disk, discarding what is in memory.
+// It is what makes a restore take effect without stopping the server.
+func (s *Store) Reload() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := prepare(s.dir); err != nil {
+		return err
+	}
+	fresh := &Store{
+		dir:               s.dir,
+		enclaves:          map[string]*model.Enclave{},
+		assets:            map[string]*model.Asset{},
+		scans:             map[string]*model.Scan{},
+		findings:          map[string]*model.Finding{},
+		assessments:       map[string]*model.Assessment{},
+		risks:             map[string]*model.RiskEntry{},
+		findingsByAsset:   map[string][]string{},
+		findingsByEnclave: map[string][]string{},
+		assetsByEnclave:   map[string][]string{},
+		assetEnclave:      map[string]string{},
+		fingerprints:      map[string]string{},
+		dirty:             map[string]bool{},
+	}
+	// Loading into a separate value first means a corrupt file on disk leaves
+	// the running store untouched rather than half-replaced.
+	if err := fresh.load(); err != nil {
+		return err
+	}
+	s.enclaves, s.assets, s.scans = fresh.enclaves, fresh.assets, fresh.scans
+	s.findings, s.assessments, s.risks = fresh.findings, fresh.assessments, fresh.risks
+	s.findingsByAsset, s.findingsByEnclave = fresh.findingsByAsset, fresh.findingsByEnclave
+	s.assetsByEnclave, s.assetEnclave = fresh.assetsByEnclave, fresh.assetEnclave
+	s.fingerprints, s.dirty = fresh.fingerprints, map[string]bool{}
+	return nil
 }
 
 // Dir is the directory the store persists into.

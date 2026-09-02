@@ -197,3 +197,23 @@ func (r *Registry) Remove(id string) error {
 
 // Dir is where imported catalogues are kept.
 func (r *Registry) Dir() string { return r.dir }
+
+// Reload discards every loaded catalogue and reads them again from the
+// built-in set and the directory. A restore replaces the files underneath a
+// running server, and without this the pages would keep serving what was
+// there before.
+func (r *Registry) Reload() error {
+	r.mu.Lock()
+	r.cats = map[string]*Catalog{}
+	r.mu.Unlock()
+	if err := r.loadBuiltin(); err != nil {
+		return err
+	}
+	if r.dir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(r.dir, 0o755); err != nil {
+		return err
+	}
+	return r.loadDir()
+}

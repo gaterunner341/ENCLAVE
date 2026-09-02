@@ -145,6 +145,9 @@ enclave import --enclave CORE scan.ckl results.nessus
 enclave import --enclave CORE --asset asset-2026...-0001 scan.ckl
 enclave import --enclave CORE --place-by-address estate-wide.nessus
 
+enclave backup -o enclave-backup.zip        write everything to one file
+enclave restore enclave-backup.zip --yes   replace everything from one file
+
 enclave export findings  --enclave CORE > findings.csv
 enclave export baseline  --enclave CORE > baseline.csv
 enclave export assets    > assets.csv
@@ -163,12 +166,51 @@ There is also a read-only JSON API on the running server, at `/api/enclaves`,
 
 In a folder called `enclave-data` next to the executable.
 
-- Back it up by copying that folder.
+- Back it up from the **Data** page, or by copying the folder.
 - Start over by deleting it.
 - Put it somewhere else with `--data DIR` or by setting `ENCLAVE_DATA`.
 
 Inside are plain JSON files, plus `catalogs/` and `mappings/` for anything you
 imported. You can read them, diff them, and put them in version control.
+
+---
+
+## Upgrading to a new version
+
+Three steps, and none of them involve finding a folder.
+
+1. In the version you are running now, open **Data** and click
+   **Download a backup**. One file, everything in it.
+2. Put the new build wherever you want it and start it.
+3. Open its **Data** page, upload the file, type `REPLACE`, and restore.
+
+That carries your enclaves, assets, findings, imports, control assessments and
+risk entries, along with any control catalogues and mapping tables you loaded.
+
+From a terminal it is the same two steps:
+
+```
+old-enclave backup -o enclave-backup.zip
+new-enclave restore enclave-backup.zip
+```
+
+Restoring over an install that already has data asks first; add `--yes` when
+you mean it. Whatever was there is written to `enclave-data/backups/` before
+anything is replaced, so a restore into the wrong instance can be undone.
+
+**Copying the whole `enclave-data` folder to the new location works too**, and
+always has. The backup file exists so you do not have to know that.
+
+### What the version stamp does
+
+The data folder records which layout wrote it, in `schema.json`. A newer build
+reads older data directly and upgrades it if the layout has changed. An older
+build handed newer data refuses to open it and says which version wrote it,
+rather than reading half of it and writing back something neither version can
+use. The same check runs on a backup file before a single byte is written.
+
+If you see that message, the fix is to run the newer build, or to restore a
+backup taken with the version you are running.
 
 ---
 

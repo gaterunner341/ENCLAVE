@@ -18,6 +18,7 @@
       <a href="/catalogs" {{if eq .Nav "catalogs"}}class="on"{{end}}>Baselines</a>
       <a href="/mappings" {{if eq .Nav "mappings"}}class="on"{{end}}>Mappings</a>
       <a href="/reports" {{if eq .Nav "reports"}}class="on"{{end}}>Reports</a>
+      <a href="/data" {{if eq .Nav "data"}}class="on"{{end}}>Data</a>
     </nav>
     {{if .ReadOnly}}<span class="badge plain">Read only</span>{{end}}
   </div>
@@ -52,6 +53,7 @@
 </main>
 <footer class="site">
   <span>ENCLAVE {{.Version}}</span>
+  <span><a href="/data">Back up or restore</a></span>
   <span class="spacer"></span>
   <span>Rendered {{datetime .Now}}</span>
 </footer>

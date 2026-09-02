@@ -552,3 +552,40 @@ func cleanIndex(index string) string {
 	}
 	return out
 }
+
+// Reload discards every loaded table and reads them again from the seed set
+// and the directory, so that a restore takes effect without a restart.
+func (r *Registry) Reload() error {
+	fresh := map[string]*Set{}
+	for _, s := range seedSets() {
+		fresh[s.ID] = s
+	}
+	if r.dir != "" {
+		if err := os.MkdirAll(r.dir, 0o755); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(r.dir)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			path := filepath.Join(r.dir, e.Name())
+			set, err := LoadFile(path)
+			if err != nil {
+				fresh["!error:"+e.Name()] = &Set{
+					ID: "!error:" + e.Name(), Name: e.Name(),
+					Note: "could not be loaded: " + err.Error(),
+				}
+				continue
+			}
+			fresh[set.ID] = set
+		}
+	}
+	r.mu.Lock()
+	r.sets = fresh
+	r.mu.Unlock()
+	return nil
+}

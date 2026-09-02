@@ -1,0 +1,145 @@
+{{template "head" .}}
+{{$d := .Data}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Data and upgrades</h1>
+    <p class="lede">Everything ENCLAVE knows lives in one folder of plain files. Take a backup
+      before you upgrade, run the new build, and restore it. That is the whole procedure.</p>
+  </div>
+  <div>
+    <a class="btn primary" href="/data/backup">Download a backup</a>
+  </div>
+</div>
+
+<div class="grid four" style="margin-bottom: 1.25rem">
+  <div class="stat"><div class="label">Enclaves</div><div class="value">{{comma $d.Counts.Enclaves}}</div></div>
+  <div class="stat"><div class="label">Assets</div><div class="value">{{comma $d.Counts.Assets}}</div></div>
+  <div class="stat"><div class="label">Findings</div><div class="value">{{comma $d.Counts.Findings}}</div>
+    <div class="note">{{comma $d.Counts.OpenFindings}} open</div></div>
+  <div class="stat"><div class="label">Risk entries</div><div class="value">{{comma $d.Counts.Risks}}</div>
+    <div class="note">{{comma $d.Counts.Scans}} imports on file</div></div>
+</div>
+
+{{if $d.StampError}}
+<div class="notice bad">The data directory's version stamp could not be read: {{$d.StampError}}</div>
+{{end}}
+
+<div class="split">
+  <div>
+    <div class="card">
+      <header><h2>Upgrading to a new version</h2></header>
+      <div class="card-body">
+        <ol style="margin: 0 0 1rem; padding-left: 1.2rem; line-height: 1.9">
+          <li><strong>Download a backup</strong> from the button above. One file, everything in it.</li>
+          <li>Put the new build wherever you want it and start it.</li>
+          <li>Open its <strong>Data</strong> page and restore the file.</li>
+        </ol>
+        <p style="color: var(--text-2)">The backup carries the enclaves, assets, findings,
+          imports, control assessments and risk entries, along with any control catalogues and
+          mapping tables you loaded. It is an ordinary zip: open it and the files inside are the
+          same readable JSON that sits in the data folder.</p>
+        <p style="color: var(--text-2); margin-bottom: 0">Copying the whole
+          <span class="mono">{{$d.Dir}}</span> folder to the new location does the same job. The
+          backup file exists so you do not have to know that.</p>
+      </div>
+    </div>
+
+    {{if not .ReadOnly}}
+    <div class="card" style="border-color: color-mix(in srgb, var(--warn) 35%, var(--border))">
+      <header><h2>Restore from a backup</h2></header>
+      <div class="card-body">
+        <p><strong>This replaces everything currently here.</strong> A restore is not a merge:
+          records that are not in the file are gone afterwards. What is here now is saved to the
+          backups folder first, so a restore onto the wrong instance can be undone.</p>
+        <form method="post" action="/data/restore" enctype="multipart/form-data"
+              data-confirm="Replace all current data with the contents of this backup?">
+          <div class="field">
+            <label for="file">Backup file
+              <span class="hint">A .zip produced by ENCLAVE. One from a newer version than this
+                build is refused rather than half-loaded.</span></label>
+            <input type="file" id="file" name="file" required accept=".zip,application/zip">
+          </div>
+          <div class="field" style="max-width: 280px">
+            <label for="confirm">Type REPLACE to confirm</label>
+            <input type="text" id="confirm" name="confirm" autocomplete="off" placeholder="REPLACE">
+          </div>
+          <button class="btn danger" type="submit">Restore and replace everything</button>
+        </form>
+      </div>
+    </div>
+    {{end}}
+
+    <div class="card">
+      <header><h2>Saved copies</h2><span class="spacer"></span>
+        {{if not .ReadOnly}}
+        <form method="post" action="/data/snapshot" style="display: inline">
+          <button class="btn small" type="submit">Save a copy now</button>
+        </form>
+        {{end}}
+      </header>
+      {{if $d.Saved}}
+      <div class="table-wrap"><table>
+        <thead><tr><th>File</th><th>Taken</th><th class="num">Size</th><th></th></tr></thead>
+        <tbody>{{range $d.Saved}}
+        <tr>
+          <td class="mono">{{.Name}}</td>
+          <td>{{datetime .Modified}}</td>
+          <td class="num">{{comma (kb .Size)}} KB</td>
+          <td><a class="btn small" href="/data/backups/{{.Name}}">Download</a></td>
+        </tr>
+        {{end}}</tbody>
+      </table></div>
+      <div class="table-note">These sit in <span class="mono">{{$d.Dir}}/backups</span> and are
+        not included in the backups you download, so they cannot nest.</div>
+      {{else}}
+      <div class="empty">
+        <p>No copies have been saved inside the data folder yet. One is written automatically
+           before any restore.</p>
+      </div>
+      {{end}}
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>Where the data is</h3></header>
+      <div class="card-body">
+        <div class="facts">
+          <div><div class="k">Folder</div><div class="v mono" style="font-size: .78rem">{{$d.Dir}}</div></div>
+          <div><div class="k">Size on disk</div><div class="v">{{comma (kb $d.Size)}} KB</div></div>
+          <div><div class="k">Data schema</div><div class="v">{{$d.Stamp.Schema}}
+            {{if ne $d.Stamp.Schema $d.Schema}}<span class="badge sev-medium">this build uses {{$d.Schema}}</span>{{end}}</div></div>
+          <div><div class="k">Written by</div><div class="v">{{if $d.Stamp.WrittenBy}}ENCLAVE {{$d.Stamp.WrittenBy}}{{else}}an earlier build{{end}}</div></div>
+          <div><div class="k">Last stamped</div><div class="v">{{datetime $d.Stamp.WrittenAt}}</div></div>
+          <div><div class="k">This build</div><div class="v">ENCLAVE {{.Version}}</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h3>Why the version matters</h3></header>
+      <div class="card-body" style="color: var(--text-2); font-size: .85rem">
+        <p>The data folder records which layout wrote it. A build that understands that layout
+           reads it directly. A newer build upgrades it on the way in.</p>
+        <p style="margin-bottom: 0">An older build handed data from a newer one refuses to open it
+           and says so, rather than reading half of it and writing back something neither version
+           can use. The same check runs on a backup file before a single byte is written.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h3>Other ways out</h3></header>
+      <div class="card-body">
+        <p style="color: var(--text-2); font-size: .85rem">A backup is for moving ENCLAVE. To get
+          the contents into something else, the exports are plain CSV and the API is plain JSON.</p>
+        <div class="pill-row">
+          <a class="btn small" href="/export/assets">Assets</a>
+          <a class="btn small" href="/export/findings">Findings</a>
+          <a class="btn small" href="/export/baseline">Baseline</a>
+          <a class="btn small" href="/export/risks">Risk register</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{{template "foot" .}}
