@@ -346,3 +346,68 @@ func TestAssetTypeGuessing(t *testing.T) {
 		}
 	}
 }
+
+func TestAPlainListOfCVEsNeedsNoTitleColumn(t *testing.T) {
+	// The commonest vulnerability export there is: hosts and the CVEs on them,
+	// with nothing that could be called a title.
+	in := "Host,IP Address,CVE,Severity,CVSS,Solution,First Detected\n" +
+		"DB-SRV-04,10.20.4.40,CVE-2024-1086,Critical,7.8,Update the kernel,2025-05-11\n" +
+		"DB-SRV-04,10.20.4.40,CVE-2024-2511,Medium,5.9,Update openssl,2025-06-02\n" +
+		"WKS-1123,10.20.7.23,CVE-2025-4664,High,8.8,Update Chrome,2025-07-19\n"
+	p, err := PreviewCSV([]byte(in), 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Mapping[FCVE] != "CVE" {
+		t.Fatalf("the CVE column was not detected: %v", p.Mapping)
+	}
+	if _, ok := p.Mapping[FTitle]; ok {
+		t.Fatalf("nothing here is a title, but one was detected: %q", p.Mapping[FTitle])
+	}
+
+	res, err := Parse([]byte(in), "cves.csv", CSVOptions{Mapping: p.Mapping})
+	if err != nil {
+		t.Fatalf("a list of CVEs should import without a title column: %v", err)
+	}
+	if len(res.Hosts) != 2 {
+		t.Fatalf("got %d hosts, want 2", len(res.Hosts))
+	}
+	if res.Total() != 3 {
+		t.Fatalf("got %d findings, want 3", res.Total())
+	}
+	f := res.Hosts[0].Findings[0]
+	if f.Title != "CVE-2024-1086" {
+		t.Errorf("the identifier should become the title, got %q", f.Title)
+	}
+	if len(f.CVEs) != 1 || f.CVEs[0] != "CVE-2024-1086" {
+		t.Errorf("CVEs = %v", f.CVEs)
+	}
+	if f.Severity != model.SeverityCritical {
+		t.Errorf("severity = %q", f.Severity)
+	}
+	// Without a rule identifier, re-importing has to merge rather than
+	// duplicate, so the CVE stands in as the identity.
+	if f.RuleID == "" {
+		t.Error("a CVE row needs an identifier so a re-import merges")
+	}
+}
+
+func TestCSVStillNeedsSomethingToIdentifyAFinding(t *testing.T) {
+	_, err := Parse([]byte("host,ip\nsrv,10.0.0.1\n"), "x.csv",
+		CSVOptions{Mapping: map[Field]string{FAssetName: "host"}})
+	if err == nil || !strings.Contains(err.Error(), "title column or a CVE column") {
+		t.Errorf("expected a message naming both options, got %v", err)
+	}
+}
+
+func TestARowWithATitleAndACVEKeepsItsTitle(t *testing.T) {
+	in := "Host,Vulnerability Title,CVE\nsrv,Kernel privilege escalation,CVE-2024-1086\n"
+	p, _ := PreviewCSV([]byte(in), 1)
+	res, err := Parse([]byte(in), "x.csv", CSVOptions{Mapping: p.Mapping})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Hosts[0].Findings[0].Title; got != "Kernel privilege escalation" {
+		t.Errorf("title = %q, want the title column to win", got)
+	}
+}

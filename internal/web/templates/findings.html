@@ -6,7 +6,9 @@
     <p class="lede">Every scan result in {{$e.Name}}, whatever tool produced it. A finding stays
       here until a scan stops reporting it or somebody records a decision about it.</p>
   </div>
-  <div><a class="btn" href="/export/findings?enclave={{$e.ID}}">Export</a></div>
+  <div><a class="btn" href="/export/findings?enclave={{$e.ID}}">Export</a>
+    {{if not .ReadOnly}}<a class="btn" href="/enclaves/{{$e.ID}}/findings/new">Record a finding</a>
+    <a class="btn primary" href="/import?enclave={{$e.ID}}">Import a scan</a>{{end}}</div>
 </div>
 
 <div class="card">
@@ -84,7 +86,8 @@
     {{if $f.Active}}<p>Try widening the filters.</p><a class="btn" href="/enclaves/{{$e.ID}}/findings">Clear filters</a>
     {{else}}<p>No scan results have been imported for this enclave yet. STIG checklists, SCAP
       results, Nessus and ACAS exports and spreadsheets all land here.</p>
-    {{if not .ReadOnly}}<a class="btn primary" href="/import?enclave={{$e.ID}}">Import scan results</a>{{end}}{{end}}
+    {{if not .ReadOnly}}<a class="btn primary" href="/import?enclave={{$e.ID}}">Import scan results</a>
+    <a class="btn" href="/enclaves/{{$e.ID}}/findings/new">Record one by hand</a>{{end}}{{end}}
   </div>
   {{end}}
 </div>

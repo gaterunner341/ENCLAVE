@@ -92,6 +92,10 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /assets/{aid}/delete", s.handleAssetDelete)
 
 	m.HandleFunc("GET /enclaves/{id}/findings", s.handleFindingList)
+	m.HandleFunc("GET /enclaves/{id}/findings/new", s.handleFindingForm)
+	m.HandleFunc("POST /enclaves/{id}/findings/new", s.handleFindingSave)
+	m.HandleFunc("GET /assets/{aid}/findings/new", s.handleFindingForm)
+	m.HandleFunc("POST /assets/{aid}/findings/new", s.handleFindingSave)
 	m.HandleFunc("GET /findings/{fid}", s.handleFindingDetail)
 	m.HandleFunc("POST /findings/{fid}/disposition", s.handleDisposition)
 
@@ -129,6 +133,9 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /data/restore", s.handleRestore)
 	m.HandleFunc("POST /data/snapshot", s.handleSnapshot)
 	m.HandleFunc("GET /data/backups/{name}", s.handleSavedBundle)
+
+	m.HandleFunc("GET /vulnerabilities", s.handleVulnList)
+	m.HandleFunc("GET /vulnerabilities/{cve}", s.handleVulnDetail)
 
 	m.HandleFunc("GET /reports", s.handleReports)
 	m.HandleFunc("GET /export/{kind}", s.handleExportCSV)

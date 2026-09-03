@@ -1,0 +1,141 @@
+{{template "head" .}}
+{{$d := .Data}}{{$e := .Enclave}}{{$a := $d.Asset}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs">{{if $a}}<a href="/assets/{{$a.ID}}">{{$a.DisplayName}}</a>
+      {{else}}<a href="/enclaves/{{$e.ID}}/findings">Findings</a>{{end}}</div>
+    <h1>Record a finding</h1>
+    <p class="lede">For a vulnerability somebody found without a scanner, or one a scanner cannot
+      see. Give it a CVE and it counts towards the same controls and the same risk score as an
+      imported one.</p>
+  </div>
+</div>
+
+<form method="post" action="{{if $a}}/assets/{{$a.ID}}/findings/new{{else}}/enclaves/{{$e.ID}}/findings/new{{end}}">
+<div class="split">
+  <div class="card">
+    <header><h2>What was found</h2></header>
+    <div class="card-body">
+      {{if $a}}
+      <div class="field">
+        <label>Host</label>
+        <p style="margin: 0"><strong>{{$a.DisplayName}}</strong>
+          <span style="color: var(--text-3)">{{$a.Type.Label}}{{if $a.Platform}} · {{$a.Platform}}{{end}}</span></p>
+      </div>
+      {{else}}
+      <div class="field">
+        <label for="asset_id">Host</label>
+        <select id="asset_id" name="asset_id" required>
+          <option value="">Choose a host</option>
+          {{range $d.Assets}}<option value="{{.ID}}">{{.DisplayName}}{{if ne .Platform "Unknown"}} · {{truncate 40 .Platform}}{{end}}</option>{{end}}
+        </select>
+      </div>
+      {{end}}
+
+      <div class="field">
+        <label for="cves">CVEs
+          <span class="hint">Comma separated, in the form CVE-2024-1086. Anything else is
+            rejected rather than stored as a CVE that is not one.</span></label>
+        <input type="text" id="cves" name="cves" class="mono" value="{{$d.CVE}}"
+               placeholder="CVE-2024-1086, CVE-2024-21762" autofocus>
+      </div>
+
+      <div class="field">
+        <label for="title">Title
+          <span class="hint">Left blank, the CVE identifiers are used.</span></label>
+        <input type="text" id="title" name="title" placeholder="Kernel privilege escalation">
+      </div>
+
+      <div class="field">
+        <label for="description">What it is</label>
+        <textarea id="description" name="description" rows="4"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="fix">How to fix it</label>
+        <textarea id="fix" name="fix" rows="3"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="comments">Notes</label>
+        <textarea id="comments" name="comments" rows="2"
+                  placeholder="Where this came from: a vendor advisory, a penetration test, a manual check."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h2>How bad, and since when</h2></header>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label for="cvss">CVSS base score
+              <span class="hint">0 to 10. Sets the severity on its own.</span></label>
+            <input type="text" id="cvss" name="cvss" placeholder="9.8">
+          </div>
+          <div class="field">
+            <label for="severity">Severity
+              <span class="hint">Leave blank to take it from the CVSS score.</span></label>
+            <select id="severity" name="severity">
+              <option value="">From the CVSS score</option>
+              {{range severities}}<option value="{{.}}">{{.Label}}</option>{{end}}
+            </select>
+          </div>
+          <div class="field">
+            <label for="first_seen">First seen
+              <span class="hint">Finding age runs from here. Defaults to today.</span></label>
+            <input type="date" id="first_seen" name="first_seen">
+          </div>
+          <div class="field">
+            <label for="due">Remediate by
+              <span class="hint">Blank uses the default target for the severity.</span></label>
+            <input type="date" id="due" name="due">
+          </div>
+        </div>
+        <div class="field">
+          <label for="cvss_vector">CVSS vector</label>
+          <input type="text" id="cvss_vector" name="cvss_vector" class="mono"
+                 placeholder="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>Where on the host</h2></header>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field"><label for="port">Port</label>
+            <input type="number" id="port" name="port" min="0" max="65535"></div>
+          <div class="field"><label for="protocol">Protocol</label>
+            <input type="text" id="protocol" name="protocol" placeholder="tcp"></div>
+          <div class="field"><label for="service">Service</label>
+            <input type="text" id="service" name="service" placeholder="www"></div>
+          <div class="field"><label for="rule_id">Reference
+            <span class="hint">A plugin or advisory identifier, if there is one.</span></label>
+            <input type="text" id="rule_id" name="rule_id" class="mono"></div>
+        </div>
+        <div class="field"><label for="recorded_by">Recorded by</label>
+          <input type="text" id="recorded_by" name="recorded_by"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h3>What happens next</h3></header>
+      <div class="card-body" style="color: var(--text-2); font-size: .85rem">
+        <p>It is identified the same way a scanned finding is, by its reference and the host. If a
+          later scan reports the same thing on the same machine, the two merge rather than
+          duplicating, and the first-seen date you set here is the one that survives.</p>
+        <p style="margin: 0">It is filed under an import called
+          <strong>Recorded by hand</strong>, so it is traceable like everything else.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="form-actions">
+  <button class="btn primary" type="submit">Record it</button>
+  <a class="btn" href="{{if $a}}/assets/{{$a.ID}}{{else}}/enclaves/{{$e.ID}}/findings{{end}}">Cancel</a>
+</div>
+</form>
+{{template "foot" .}}

@@ -90,6 +90,40 @@ Two kinds of result are distinguished:
   Its own pass/fail and its own severity are authoritative, and the observed
   value is kept as the finding detail.
 
+## Vulnerability scans and CVE lists
+
+Three routes, depending on what you have.
+
+**A scanner export.** Upload the `.nessus` file. Plugins become findings with
+their CVEs, CVSS score and vector; compliance audit results in the same file are
+read as configuration checks instead.
+
+**A spreadsheet of hosts and CVEs.** The commonest export there is, and it
+usually has no column that could be called a title:
+
+```
+Host,IP Address,CVE,Severity,CVSS,Solution,First Detected
+DB-SRV-04,10.20.4.40,CVE-2024-1086,Critical,7.8,Update the kernel,2025-05-11
+```
+
+That imports as it stands. A finding needs either a title or a CVE, not both:
+where there is no title the identifier becomes one, because a CVE is a complete
+finding on its own. The CVE also stands in as the finding's identity, so
+re-importing next month's list merges rather than duplicating.
+
+**One CVE somebody found without a scanner.** Use **Record a finding** on the
+host's page. Give it the identifier and a CVSS score and it carries the same
+weight as an imported one: it reaches the same controls, ages against the same
+remediation target, and appears in the same views. It is filed under an import
+called "Recorded by hand", so it stays as traceable as everything else.
+
+However it arrives, an unpatched CVE is treated as evidence about flaw
+remediation and vulnerability monitoring, so it counts against the control
+baseline and not only as a patch. The **Vulnerabilities** page turns the
+per-host findings round the other way: one row per CVE, with every host it is
+on, the worst severity and CVSS seen, how long the oldest instance has been
+open, and how many are past their remediation target.
+
 ## Spreadsheets
 
 Any file with a header row. Column headings from the common exporters — Tenable,
@@ -99,8 +133,8 @@ Comma, tab, semicolon and pipe delimiters are all sniffed, and Excel's UTF-8
 byte order mark is stripped so it does not turn the first column name into
 something nothing matches.
 
-A finding title is the only required column. Rows are grouped by asset name, so
-several rows about one machine become one asset with several findings.
+Either a finding title or a CVE column is required; rows are grouped by asset
+name, so several rows about one machine become one asset with several findings.
 
 With no status column, every row is read as open, because a row in a
 vulnerability export exists precisely because the condition was found.

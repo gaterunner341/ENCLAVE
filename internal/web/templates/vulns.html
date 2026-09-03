@@ -1,0 +1,99 @@
+{{template "head" .}}
+{{$d := .Data}}{{$s := $d.Summary}}
+<div class="page-head">
+  <div class="grow">
+    <h1>Vulnerabilities</h1>
+    <p class="lede">Every CVE recorded across the estate, and what it is on. Findings are kept per
+      host, which is right for fixing them; this is the other way round, which is right for
+      deciding what to fix first.</p>
+  </div>
+  <div>
+    <a class="btn" href="/export/vulnerabilities">Export</a>
+    {{if not .ReadOnly}}<a class="btn primary" href="/import">Upload a scan</a>{{end}}
+  </div>
+</div>
+
+<div class="grid four" style="margin-bottom: 1.25rem">
+  <div class="stat"><div class="label">Open CVEs</div><div class="value">{{comma $s.Open}}</div>
+    <div class="note">{{comma $s.Total}} recorded in all</div></div>
+  <div class="stat"><div class="label">Critical and high</div>
+    <div class="value">{{comma (add $s.Critical $s.High)}}</div>
+    <div class="note">{{comma $s.Critical}} critical</div></div>
+  <div class="stat"><div class="label">Past remediation target</div>
+    <div class="value {{if $s.PastTarget}}band-high{{end}}">{{comma $s.PastTarget}}</div></div>
+  <div class="stat"><div class="label">Hosts affected</div><div class="value">{{comma $s.Assets}}</div>
+    <div class="note">{{comma $s.Accepted}} CVEs with an accepted risk</div></div>
+</div>
+
+<div class="card">
+  <form class="filters" method="get" data-autosubmit>
+    <div class="field grow"><label for="q">Search</label>
+      <input type="search" id="q" name="q" value="{{$d.Query}}" placeholder="CVE-2024-1086, or words from the title"></div>
+    <div class="field"><label for="enclave">Enclave</label>
+      <select id="enclave" name="enclave"><option value="">All</option>
+        {{range $d.Enclaves}}<option value="{{.ID}}" {{if eq .ID $d.Enclave}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select></div>
+    <div class="field"><label for="severity">Severity</label>
+      <select id="severity" name="severity"><option value="">Any</option>
+        {{range severities}}<option value="{{.}}" {{if eq (printf "%s" .) $d.Severity}}selected{{end}}>{{.Label}}</option>{{end}}
+      </select></div>
+    <div class="field"><label for="show">Show</label>
+      <select id="show" name="show">
+        <option value="open" {{if eq $d.Show "open"}}selected{{end}}>Open</option>
+        <option value="overdue" {{if eq $d.Show "overdue"}}selected{{end}}>Past target</option>
+        <option value="all" {{if eq $d.Show "all"}}selected{{end}}>Everything</option>
+        <option value="closed" {{if eq $d.Show "closed"}}selected{{end}}>Closed</option>
+      </select></div>
+    <button class="btn" type="submit">Apply</button>
+    <a class="btn" href="/vulnerabilities">Clear</a>
+  </form>
+
+  {{if $d.Rows}}
+  <div class="table-wrap">
+    <table data-sortable>
+      <thead><tr>
+        <th data-sort="text">Severity</th><th data-sort="text">CVE</th>
+        <th data-sort="text">Seen as</th>
+        <th class="num" data-sort="number">CVSS</th>
+        <th class="num" data-sort="number">Hosts</th>
+        <th data-sort="text">Enclaves</th>
+        <th class="num" data-sort="number">Oldest</th>
+        <th class="num" data-sort="number">Past target</th>
+        <th class="num" data-sort="number">Risk</th>
+      </tr></thead>
+      <tbody>
+      {{range $d.Rows}}
+      <tr>
+        <td><span class="badge {{severityClass .Severity}}">{{.Severity.Label}}</span></td>
+        <td class="mono"><a href="/vulnerabilities/{{.CVE}}"><strong>{{.CVE}}</strong></a>
+          {{if not .Live}}<div><span class="badge disp-remediated">closed</span></div>{{end}}</td>
+        <td class="wrap">{{truncate 80 .Title}}</td>
+        <td class="num">{{if .CVSS}}{{num .CVSS}}{{else}}—{{end}}</td>
+        <td class="num">{{.Assets}}</td>
+        <td style="font-size: .78rem">
+          {{range .Enclaves}}{{with index $d.EnclaveIndex .}}<div>{{.Name}}</div>{{end}}{{end}}</td>
+        <td class="num">{{if .Oldest}}{{.Oldest}}d{{else}}—{{end}}</td>
+        <td class="num">{{if .PastTarget}}<span class="badge sev-high">{{.PastTarget}}</span>{{else}}—{{end}}</td>
+        <td class="num">{{num .Score}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-note">
+    {{if $d.Truncated}}Showing the first {{$d.Window}} of {{comma $d.Total}} matching CVEs.
+    {{else}}{{comma $d.Total}} CVEs match.{{end}}
+    A finding naming several CVEs counts under each of them, because the host is exposed to all
+    of them until it is fixed.
+  </div>
+  {{else}}
+  <div class="empty">
+    <h3>No CVEs recorded</h3>
+    <p>Upload a vulnerability scan and they appear here. ENCLAVE reads Nessus and ACAS exports
+       directly, and any spreadsheet with a CVE column. A single CVE can also be typed against a
+       host from that host's page.</p>
+    {{if not .ReadOnly}}<a class="btn primary" href="/import">Upload a scan</a>{{end}}
+  </div>
+  {{end}}
+</div>
+{{template "foot" .}}

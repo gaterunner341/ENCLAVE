@@ -126,7 +126,9 @@
   <div>
     <div class="card">
       <header><h3>Open findings by severity</h3></header>
-      <div class="card-body">{{template "donut" dict "D" $d.Severity "T" "Open findings by severity"}}</div>
+      <div class="card-body">{{template "donut" dict "D" $d.Severity "T" "Open findings by severity"}}
+        <div style="margin-top: .75rem"><a class="btn small" href="/vulnerabilities?enclave={{$e.ID}}">CVEs in this enclave</a></div>
+      </div>
     </div>
 
     <div class="card">

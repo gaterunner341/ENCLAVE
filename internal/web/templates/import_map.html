@@ -22,12 +22,12 @@
 
 <div class="card">
   <header><h2>Columns</h2><span class="spacer"></span>
-    <span style="color: var(--text-3); font-size: .8rem">A finding title is the only required field.</span></header>
+    <span style="color: var(--text-3); font-size: .8rem">A finding title or a CVE is required. Either will do.</span></header>
   <div class="card-body">
     <div class="form-grid">
       {{range $d.Fields}}
       <div class="field">
-        <label for="map_{{.}}">{{.Label}}{{if .Required}} <span style="color: var(--bad)">*</span>{{end}}</label>
+        <label for="map_{{.}}">{{.Label}}{{if .Required}} <span style="color: var(--bad)" title="a title or a CVE is required">*</span>{{end}}</label>
         <select id="map_{{.}}" name="map_{{.}}">
           <option value="">— not in this file —</option>
           {{$sel := index $p.Mapping .}}

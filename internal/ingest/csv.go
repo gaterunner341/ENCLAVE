@@ -119,8 +119,15 @@ func (f Field) Label() string {
 	return string(f)
 }
 
-// Required reports whether an import cannot proceed without the field.
-func (f Field) Required() bool { return f == FTitle }
+// Required reports whether an import cannot proceed without the field. A title
+// or a CVE will do: a list of hosts and CVEs is a complete set of findings.
+func (f Field) Required() bool { return f == FTitle || f == FCVE }
+
+// nonEmpty reports whether a field is mapped to a column at all.
+func nonEmpty(m map[Field]string, f Field) (string, bool) {
+	v, ok := m[f]
+	return v, ok && strings.TrimSpace(v) != ""
+}
 
 // aliases are the column headings the common exporters use. Matching is done
 // on a normalised heading, so case, punctuation and spacing do not matter.
@@ -340,8 +347,12 @@ func parseCSV(data []byte, filename string, opts CSVOptions) (*Result, error) {
 		}
 		return strings.TrimSpace(row[i])
 	}
-	if h, ok := mapping[FTitle]; !ok || h == "" {
-		return nil, fmt.Errorf("a finding title column has to be chosen before the file can be imported")
+	_, hasTitle := nonEmpty(mapping, FTitle)
+	_, hasCVE := nonEmpty(mapping, FCVE)
+	if !hasTitle && !hasCVE {
+		return nil, fmt.Errorf(
+			"choose either a finding title column or a CVE column; a plain list of CVEs needs no title, " +
+				"because the identifier is the finding")
 	}
 
 	res := &Result{Scan: model.Scan{
@@ -361,6 +372,13 @@ func parseCSV(data []byte, filename string, opts CSVOptions) (*Result, error) {
 		}
 		line++
 		title := oneLine(get(row, FTitle))
+		rowCVEs := splitList(get(row, FCVE))
+		if title == "" {
+			// A CVE identifier is a complete finding on its own. Requiring a
+			// title as well would reject the commonest export there is: a list
+			// of hosts and the CVEs found on them.
+			title = strings.Join(rowCVEs, ", ")
+		}
 		if title == "" {
 			continue
 		}
@@ -398,7 +416,7 @@ func parseCSV(data []byte, filename string, opts CSVOptions) (*Result, error) {
 
 		f := &model.Finding{
 			Title:          title,
-			RuleID:         get(row, FRuleID),
+			RuleID:         firstNonEmpty(get(row, FRuleID), strings.Join(rowCVEs, ",")),
 			GroupID:        get(row, FGroupID),
 			Description:    clean(get(row, FDescription)),
 			CheckText:      clean(get(row, FCheck)),
@@ -406,7 +424,7 @@ func parseCSV(data []byte, filename string, opts CSVOptions) (*Result, error) {
 			FindingDetails: clean(get(row, FDetails)),
 			Comments:       clean(get(row, FComments)),
 			CCIs:           splitList(get(row, FCCI)),
-			CVEs:           splitList(get(row, FCVE)),
+			CVEs:           rowCVEs,
 			Protocol:       get(row, FProtocol),
 			Service:        get(row, FService),
 		}

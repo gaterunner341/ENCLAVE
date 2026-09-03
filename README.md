@@ -83,6 +83,13 @@ what somebody claimed with what the scans found:
 **Contradicted** is the state the tool exists to produce. No document review
 finds it, because on paper the control is fine.
 
+**Vulnerabilities.** Findings are recorded per host, which is right for fixing
+them. The Vulnerabilities page turns that round: one row per CVE, every host it
+is on, the worst severity and CVSS seen, the age of the oldest instance and how
+many are past their remediation target. Scanner exports, plain CVE spreadsheets
+and a form for typing one in by hand all feed it, and an unpatched CVE counts as
+evidence against the flaw remediation controls rather than only as a patch.
+
 **Risk.** A finding's weight comes from its severity, the criticality of the
 asset it is on, the enclave's impact categorisation, whether a decision has been
 recorded about it, and how far past its remediation target it is. Enclave scores

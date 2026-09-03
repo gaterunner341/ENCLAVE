@@ -1,0 +1,5 @@
+Host,IP Address,CVE,Severity,CVSS,Solution,First Detected
+DB-SRV-04,10.20.4.40,CVE-2024-1086,Critical,7.8,Update the kernel and reboot,2025-05-11
+DB-SRV-04,10.20.4.40,CVE-2024-2511,Medium,5.9,Update openssl,2025-06-02
+WKS-1123,10.20.7.23,CVE-2025-4664,High,8.8,Update Google Chrome,2025-07-19
+APP-SRV-01,10.20.4.11,CVE-2025-21001,Critical,9.8,Apply the vendor update,2025-08-25

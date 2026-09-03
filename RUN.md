@@ -93,10 +93,11 @@ CIS Controls v8 Implementation Group 2, whichever your organisation uses.
 **3. Import a scan.** Click **Import**, choose your enclave, and upload whatever
 you have:
 
+- a vulnerability scan: a Nessus or ACAS export (`.nessus`)
+- a spreadsheet of hosts and CVEs saved as CSV, from Tenable, Qualys, Rapid7 or
+  anywhere else
 - a STIG checklist (`.ckl` from STIG Viewer 2, or `.cklb` from STIG Viewer 3)
 - SCAP results (`.xml`, XCCDF or ARF)
-- a Nessus or ACAS export (`.nessus`)
-- any vulnerability export saved as CSV
 
 Structured files import immediately. A CSV stops at a mapping screen showing
 which columns it recognised, so you can correct the guess before anything is
@@ -120,7 +121,12 @@ step that makes the gap analysis useful. Download DISA's `U_CCI_List.xml` and
 load it under **Mappings**. It replaces the small starter table that ships with
 the app and re-checks every finding you have already imported.
 
-**5. Look at the gap analysis.** Enclave → **Baseline**. Start with the controls
+**5. Look at the vulnerabilities.** The **Vulnerabilities** page lists every CVE
+across the estate, worst first, with the hosts each one is on and how long it
+has been open. To record a single CVE nobody scanned for, use **Record a
+finding** on the host's own page.
+
+**6. Look at the gap analysis.** Enclave → **Baseline**. Start with the controls
 marked **Contradicted by scans**: somebody recorded those as implemented while
 the scans against them are failing.
 

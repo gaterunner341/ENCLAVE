@@ -1,0 +1,79 @@
+{{template "head" .}}
+{{$d := .Data}}{{$c := $d.CVE}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs"><a href="/vulnerabilities">Vulnerabilities</a></div>
+    <h1 class="mono">{{$c.CVE}}</h1>
+    <p class="lede">{{$c.Title}}</p>
+    <div class="pill-row" style="margin-top: .4rem">
+      <span class="badge {{severityClass $c.Severity}}">{{$c.Severity.Label}}</span>
+      {{if $c.CVSS}}<span class="badge plain">CVSS {{num $c.CVSS}}</span>{{end}}
+      <span class="badge plain">{{$c.Assets}} hosts</span>
+      {{if $c.PastTarget}}<span class="badge sev-high">{{$c.PastTarget}} past target</span>{{end}}
+      {{if $c.Accepted}}<span class="badge disp-risk_accepted">{{$c.Accepted}} accepted</span>{{end}}
+    </div>
+  </div>
+</div>
+
+<div class="split">
+  <div class="card">
+    <header><h2>Where it is</h2><span class="spacer"></span>
+      <span class="badge plain">{{$c.Open}} open · {{$c.Closed}} closed</span></header>
+    <div class="table-wrap">
+      <table data-sortable>
+        <thead><tr><th data-sort="text">Host</th><th data-sort="text">Enclave</th>
+          <th data-sort="text">Severity</th><th data-sort="text">Decision</th>
+          <th data-sort="text">First seen</th><th class="num" data-sort="number">Age</th>
+          <th data-sort="text">Due</th></tr></thead>
+        <tbody>
+        {{range $c.Findings}}
+        <tr>
+          <td>{{template "assetlink" dict "Index" $d.AssetIndex "ID" .AssetID}}
+            <div style="font-size: .76rem"><a href="/findings/{{.ID}}">the finding</a></div></td>
+          <td style="font-size: .82rem">{{with index $d.EnclaveIndex .EnclaveID}}<a href="/enclaves/{{.ID}}">{{.Name}}</a>{{end}}</td>
+          <td><span class="badge {{severityClass .Severity}}">{{.Severity.Label}}</span></td>
+          <td>{{if .Live}}<span class="badge {{dispositionClass .Disposition}}">{{.Disposition.Label}}</span>{{else}}<span class="badge disp-remediated">{{.Status.Label}}</span>{{end}}</td>
+          <td>{{date .FirstSeen}}</td>
+          <td class="num">{{days .FirstSeen}}d</td>
+          <td style="white-space: nowrap">{{dateP (due .)}}</td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>Controls this is evidence about</h3></header>
+      {{if $d.Refs}}
+      <div class="table-wrap"><table><tbody>
+        {{range $d.Refs}}
+        <tr><td style="font-size: .78rem; color: var(--text-3)">{{.Catalog}}</td>
+          <td class="mono">{{.Control}}<div style="font-size: .78rem; font-family: var(--sans)">{{.Title}}</div></td></tr>
+        {{end}}
+      </tbody></table></div>
+      <div class="table-note">An unpatched CVE is evidence about flaw remediation and
+        vulnerability monitoring, so it counts against the baseline and not only as a patch.</div>
+      {{else}}
+      <div class="card-body"><p style="color: var(--text-2)">This has reached no control. Check
+        the <a href="/mappings">mapping tables</a>.</p></div>
+      {{end}}
+    </div>
+
+    <div class="card">
+      <header><h3>Look it up</h3></header>
+      <div class="card-body">
+        <p style="color: var(--text-2); font-size: .85rem">ENCLAVE holds no vulnerability
+          database and makes no outbound connection, so the authoritative record lives
+          elsewhere. These are the usual places, to type or paste rather than click:</p>
+        <ul style="margin: 0; padding-left: 1.1rem; color: var(--text-2); font-size: .85rem; line-height: 1.8">
+          <li>nvd.nist.gov/vuln/detail/<span class="mono">{{$c.CVE}}</span></li>
+          <li>cve.org/CVERecord?id=<span class="mono">{{$c.CVE}}</span></li>
+          <li>The CISA Known Exploited Vulnerabilities catalogue</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{{template "foot" .}}

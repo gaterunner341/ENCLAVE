@@ -222,6 +222,37 @@ func (s *Server) handleExportCSV(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+	case "vulnerabilities", "cves":
+		_ = cw.Write([]string{"CVE", "Severity", "CVSS", "Seen as", "Hosts", "Enclaves",
+			"Open", "Closed", "Risk accepted", "Past target", "Oldest (days)", "Risk score", "Affected hosts"})
+		assets := s.assetIndex()
+		enclaves := s.enclaveIndex()
+		for _, c := range risk.CVEs(s.Store.Findings(enclaveID), assets, now) {
+			names := []string{}
+			for _, id := range c.AssetIDs {
+				if a, ok := assets[id]; ok {
+					names = append(names, a.DisplayName())
+				}
+			}
+			encNames := []string{}
+			for _, id := range c.Enclaves {
+				if e, ok := enclaves[id]; ok {
+					encNames = append(encNames, e.Name)
+				}
+			}
+			cvss := ""
+			if c.CVSS > 0 {
+				cvss = strconv.FormatFloat(c.CVSS, 'f', 1, 64)
+			}
+			_ = cw.Write([]string{
+				c.CVE, c.Severity.Label(), cvss, c.Title,
+				strconv.Itoa(c.Assets()), strings.Join(encNames, "; "),
+				strconv.Itoa(c.Open), strconv.Itoa(c.Closed), strconv.Itoa(c.Accepted),
+				strconv.Itoa(c.PastTarget), strconv.Itoa(c.Oldest),
+				strconv.FormatFloat(c.Score, 'f', 1, 64), strings.Join(names, "; "),
+			})
+		}
+
 	case "risks":
 		_ = cw.Write([]string{"Enclave", "Title", "Weakness", "Source", "Status", "Owner",
 			"Likelihood", "Impact", "Score", "Band", "Detected", "Due", "Completed",
@@ -255,7 +286,7 @@ func (s *Server) handleExportCSV(w http.ResponseWriter, r *http.Request) {
 		}
 
 	default:
-		http.Error(w, "Nothing is exported under that name. Use assets, findings, baseline or risks.", http.StatusNotFound)
+		http.Error(w, "Nothing is exported under that name. Use assets, findings, vulnerabilities, baseline or risks.", http.StatusNotFound)
 	}
 }
 
@@ -281,6 +312,8 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		_ = enc.Encode(s.Store.Scans(enclaveID))
 	case "catalogs":
 		_ = enc.Encode(s.Catalogs.All())
+	case "vulnerabilities", "cves":
+		_ = enc.Encode(risk.CVEs(s.Store.Findings(enclaveID), s.assetIndex(), now))
 	case "summary":
 		type row struct {
 			Enclave  string  `json:"enclave"`
@@ -315,7 +348,7 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_ = enc.Encode(map[string]string{
 			"error":     "unknown collection",
-			"available": "enclaves, assets, findings, risks, scans, catalogs, summary",
+			"available": "enclaves, assets, findings, vulnerabilities, risks, scans, catalogs, summary",
 		})
 	}
 }

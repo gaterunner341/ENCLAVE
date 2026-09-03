@@ -829,3 +829,226 @@ func TestRestoreCarriesImportedCatalogsAndMappings(t *testing.T) {
 		t.Error("the restored catalogue is not being served")
 	}
 }
+
+func TestVulnerabilitiesAreReachableAndListed(t *testing.T) {
+	h := newHarness(t)
+	if !strings.Contains(h.get("/").Body.String(), `href="/vulnerabilities"`) {
+		t.Error("nothing links to the vulnerabilities view")
+	}
+	rec := h.get("/vulnerabilities")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "could not be rendered") {
+		t.Fatal(truncateBody(body))
+	}
+	// The fixture imports a Nessus export carrying two CVEs.
+	for _, cve := range []string{"CVE-2025-21001", "CVE-2023-20198"} {
+		if !strings.Contains(body, cve) {
+			t.Errorf("the CVE list does not show %s", cve)
+		}
+	}
+	for _, q := range []string{"?severity=critical", "?show=all", "?show=overdue", "?show=closed",
+		"?q=CVE-2023", "?enclave=CORE"} {
+		r := h.get("/vulnerabilities" + q)
+		if r.Code != http.StatusOK || strings.Contains(r.Body.String(), "could not be rendered") {
+			t.Errorf("vulnerabilities%s failed: %d", q, r.Code)
+		}
+	}
+}
+
+func TestVulnerabilityDetailShowsEveryHost(t *testing.T) {
+	h := newHarness(t)
+	rec := h.get("/vulnerabilities/CVE-2023-20198")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d: %s", rec.Code, truncateBody(rec.Body.String()))
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "could not be rendered") {
+		t.Fatal(truncateBody(body))
+	}
+	if !strings.Contains(body, "10.20.9.2") {
+		t.Error("the CVE page does not name the host it was found on")
+	}
+	// An unpatched CVE is evidence about flaw remediation, so it should reach
+	// the baseline rather than being only a patch.
+	if !strings.Contains(body, "SI-2") && !strings.Contains(body, "RA-5") {
+		t.Error("the CVE page shows no controls, so the seed mapping is not reaching it")
+	}
+	// Lookup is case-insensitive; nonsense is a 404.
+	if code := h.get("/vulnerabilities/cve-2023-20198").Code; code != http.StatusOK {
+		t.Errorf("lowercase lookup = %d", code)
+	}
+	for _, bad := range []string{"/vulnerabilities/nonsense", "/vulnerabilities/CVE-2099-0001"} {
+		if code := h.get(bad).Code; code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", bad, code)
+		}
+	}
+}
+
+func TestRecordACVEByHand(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+
+	// It is offered from the host page, which is where somebody would look.
+	page := h.get("/assets/" + a.ID).Body.String()
+	if !strings.Contains(page, "/assets/"+a.ID+"/findings/new") {
+		t.Error("the host page does not offer recording a finding")
+	}
+	if h.get("/assets/"+a.ID+"/findings/new").Code != http.StatusOK {
+		t.Fatal("the form does not render")
+	}
+
+	before := len(h.Store.AssetFindings(a.ID))
+	rec := h.post("/assets/"+a.ID+"/findings/new", url.Values{
+		"cves": {"CVE-2024-1086"}, "cvss": {"7.8"},
+		"description": {"Local privilege escalation in the netfilter subsystem."},
+		"fix":         {"Update the kernel package and reboot."},
+		"recorded_by": {"P. Kittelson"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("save = %d: %s", rec.Code, truncateBody(rec.Body.String()))
+	}
+	if loc := rec.Header().Get("Location"); strings.Contains(loc, "err=") {
+		t.Fatalf("save reported an error: %s", loc)
+	}
+	after := h.Store.AssetFindings(a.ID)
+	if len(after) != before+1 {
+		t.Fatalf("finding count went from %d to %d", before, len(after))
+	}
+
+	var got *model.Finding
+	for _, f := range after {
+		for _, c := range f.CVEs {
+			if c == "CVE-2024-1086" {
+				got = f
+			}
+		}
+	}
+	if got == nil {
+		t.Fatal("the recorded CVE is not on the host")
+	}
+	// A CVSS score sets the severity without anybody choosing one.
+	if got.Severity != model.SeverityHigh {
+		t.Errorf("CVSS 7.8 should be high, got %q", got.Severity)
+	}
+	// The title falls back to the identifier, which is a complete thought.
+	if got.Title != "CVE-2024-1086" {
+		t.Errorf("title = %q", got.Title)
+	}
+	// It reaches the same controls an imported one would.
+	if len(got.Controls("nist-800-53r5")) == 0 {
+		t.Error("a hand-entered CVE reached no control, so it is invisible to the gap analysis")
+	}
+	// And it shows up in the CVE view alongside the imported ones.
+	if !strings.Contains(h.get("/vulnerabilities").Body.String(), "CVE-2024-1086") {
+		t.Error("the recorded CVE is missing from the vulnerabilities list")
+	}
+	// It is traceable to an import, like everything else.
+	sc, ok := h.Store.Scan(got.ScanID)
+	if !ok || sc.Format != "manual" {
+		t.Errorf("the finding is not filed under a traceable import: %+v", sc)
+	}
+}
+
+func TestRecordingTheSameCVETwiceUpdates(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+	form := url.Values{"cves": {"CVE-2024-1086"}, "cvss": {"7.8"}}
+	if rec := h.post("/assets/"+a.ID+"/findings/new", form); rec.Code != http.StatusSeeOther {
+		t.Fatal(rec.Code)
+	}
+	before := len(h.Store.AssetFindings(a.ID))
+	if rec := h.post("/assets/"+a.ID+"/findings/new", form); rec.Code != http.StatusSeeOther {
+		t.Fatal(rec.Code)
+	}
+	if got := len(h.Store.AssetFindings(a.ID)); got != before {
+		t.Errorf("recording the same CVE twice duplicated it: %d then %d", before, got)
+	}
+	// Only one scan record is created for hand entry, not one per finding.
+	manual := 0
+	for _, sc := range h.Store.Scans("CORE") {
+		if sc.Format == "manual" {
+			manual++
+		}
+	}
+	if manual != 1 {
+		t.Errorf("expected one hand-entry import record, got %d", manual)
+	}
+}
+
+func TestRecordedFindingValidation(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+	for _, tc := range []struct {
+		name string
+		form url.Values
+		want string
+	}{
+		{"nothing at all", url.Values{}, "title"},
+		{"a CVE that is not one", url.Values{"cves": {"CVE-24-1"}}, "Not+a+CVE"},
+		{"CCI mistaken for a CVE", url.Values{"cves": {"CCI-000366"}}, "Not+a+CVE"},
+		{"CVSS out of range", url.Values{"cves": {"CVE-2024-1086"}, "cvss": {"14"}}, "between+0+and+10"},
+		{"CVSS that is not a number", url.Values{"cves": {"CVE-2024-1086"}, "cvss": {"high"}}, "between+0+and+10"},
+	} {
+		rec := h.post("/assets/"+a.ID+"/findings/new", tc.form)
+		loc := rec.Header().Get("Location")
+		if !strings.Contains(loc, "err=") || !strings.Contains(loc, tc.want) {
+			t.Errorf("%s: redirected to %q, expected an error mentioning %q", tc.name, loc, tc.want)
+		}
+	}
+}
+
+func TestRecordAFindingFromTheEnclaveWithAChosenHost(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+	if code := h.get("/enclaves/CORE/findings/new").Code; code != http.StatusOK {
+		t.Fatalf("the enclave-level form = %d", code)
+	}
+	rec := h.post("/enclaves/CORE/findings/new", url.Values{
+		"asset_id": {a.ID}, "title": {"Unsupported operating system in production"},
+		"severity": {"high"},
+	})
+	if rec.Code != http.StatusSeeOther || strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("save = %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	// Choosing no host is refused rather than filed somewhere arbitrary.
+	rec = h.post("/enclaves/CORE/findings/new", url.Values{"title": {"x"}})
+	if !strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Error("a finding with no host should be refused")
+	}
+}
+
+func TestVulnerabilityExportAndAPI(t *testing.T) {
+	h := newHarness(t)
+	rec := h.get("/export/vulnerabilities")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "CVE-2023-20198") || !strings.Contains(body, "Affected hosts") {
+		t.Errorf("the CVE export is missing content:\n%s", truncateBody(body))
+	}
+	rec = h.get("/api/vulnerabilities")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "CVE-2023-20198") {
+		t.Errorf("api = %d", rec.Code)
+	}
+}
+
+func TestRecordingIsBlockedInReadOnlyMode(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+	h.ReadOnly = true
+	for _, p := range []string{
+		"/assets/" + a.ID + "/findings/new", "/enclaves/CORE/findings/new",
+	} {
+		if code := h.post(p, url.Values{"cves": {"CVE-2024-1086"}}).Code; code != http.StatusForbidden {
+			t.Errorf("POST %s = %d in read-only mode, want 403", p, code)
+		}
+	}
+	// Reading the CVE views still works.
+	if code := h.get("/vulnerabilities").Code; code != http.StatusOK {
+		t.Errorf("read-only mode broke the vulnerabilities list: %d", code)
+	}
+}
