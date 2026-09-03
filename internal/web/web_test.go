@@ -358,8 +358,25 @@ func TestCSVUploadStopsAtTheMappingScreen(t *testing.T) {
 		t.Fatalf("got %d: %s", rec.Code, truncateBody(rec.Body.String()))
 	}
 	page := rec.Body.String()
-	if !strings.Contains(page, "Map the columns") {
+	if !strings.Contains(page, `name="map_title"`) || !strings.Contains(page, "/import/confirm") {
 		t.Fatal("a spreadsheet should stop at the mapping screen")
+	}
+	// The screen has to explain itself. Somebody who has never seen it should
+	// be told what it is asking and which answer is required.
+	for _, want := range []string{
+		"Which machine is each row about?",
+		"What was found?",
+		"required",
+		"What your first row becomes",
+		"Columns you have not mapped",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the mapping screen never says %q", want)
+		}
+	}
+	// Every field carries a plain-language hint, not just a label.
+	if !strings.Contains(page, "A CVE is a complete finding on its own") {
+		t.Error("the CVE field has no explanation")
 	}
 	// Nothing may have been written yet.
 	if n := len(h.Store.Findings("CORE")); n != countSeeded(h) {
@@ -1184,5 +1201,73 @@ func TestAcceptedRiskIsNotOverdue(t *testing.T) {
 	}
 	if strings.Contains(h.get("/enclaves/CORE/findings?overdue=1").Body.String(), f.Title) {
 		t.Error("the accepted risk appears in the overdue view")
+	}
+}
+
+func TestMappingScreenGroupsAndExplainsEveryField(t *testing.T) {
+	h := newHarness(t)
+	body, err := os.ReadFile(filepath.Join("..", "..", "testdata", "sample-cves.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := h.upload("/import", "file", "Book1.csv", body, map[string]string{
+		"enclave_id": "CORE", "create_assets": "on",
+	})
+	page := rec.Body.String()
+	if rec.Code != http.StatusOK || strings.Contains(page, "could not be rendered") {
+		t.Fatalf("got %d: %s", rec.Code, truncateBody(page))
+	}
+
+	// The file's own contents are on the page, so somebody can see what they
+	// uploaded rather than reasoning about it from memory.
+	if !strings.Contains(page, "DB-SRV-04") || !strings.Contains(page, `id="sample-rows"`) {
+		t.Error("the screen does not show the uploaded rows")
+	}
+	// Every field is reachable, and each one is in a group.
+	for _, group := range ingest.Groups {
+		if !strings.Contains(page, group.Name) {
+			t.Errorf("group %q is missing", group.Name)
+		}
+		for _, f := range group.Fields {
+			if !strings.Contains(page, `name="map_`+string(f)+`"`) {
+				t.Errorf("field %s is not on the form", f)
+			}
+		}
+	}
+	// No field is left out of a group, or it would be unreachable.
+	inGroup := map[ingest.Field]bool{}
+	for _, group := range ingest.Groups {
+		for _, f := range group.Fields {
+			if inGroup[f] {
+				t.Errorf("%s appears in more than one group", f)
+			}
+			inGroup[f] = true
+		}
+	}
+	for _, f := range ingest.Fields {
+		if !inGroup[f] {
+			t.Errorf("%s is in Fields but no group, so it never renders", f)
+		}
+	}
+	// The selects carry what the preview script needs to interpret a row.
+	if !strings.Contains(page, `data-map-field="cve"`) {
+		t.Error("the selects are not annotated for the preview")
+	}
+}
+
+func TestEveryMappableFieldHasALabel(t *testing.T) {
+	for _, f := range ingest.Fields {
+		if f.Label() == "" || f.Label() == string(f) {
+			t.Errorf("%s has no human label", f)
+		}
+	}
+	// The fields somebody has to decide about are the ones that need a hint;
+	// the rest are self-evident from the label.
+	for _, f := range []ingest.Field{
+		ingest.FTitle, ingest.FCVE, ingest.FSeverity, ingest.FStatus, ingest.FRuleID,
+	} {
+		if f.Hint() == "" {
+			t.Errorf("%s is a field people get wrong and has no explanation", f)
+		}
 	}
 }

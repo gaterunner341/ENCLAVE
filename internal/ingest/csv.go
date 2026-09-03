@@ -48,14 +48,89 @@ const (
 	FLastSeen  Field = "last_seen"
 )
 
-// Fields is the ordered list shown on the mapping screen. The first block
-// identifies the asset, the second the finding, the third the evidence.
+// Fields is the ordered list shown on the mapping screen.
 var Fields = []Field{
 	FAssetName, FFQDN, FIP, FMAC, FOS, FSerial, FAssetType, FRole,
-	FTitle, FRuleID, FGroupID, FSeverity, FStatus,
-	FDescription, FCheck, FFix, FDetails, FComments,
-	FCCI, FCVE, FControl, FCVSS, FPort, FProtocol, FService,
-	FFirstSeen, FLastSeen,
+	FTitle, FCVE, FSeverity, FCVSS, FStatus, FRuleID, FGroupID,
+	FDescription, FFix, FDetails, FCheck, FComments,
+	FCCI, FControl, FPort, FProtocol, FService, FFirstSeen, FLastSeen,
+}
+
+// Group is one section of the mapping screen. Twenty-seven dropdowns in one
+// undifferentiated list tells a person nothing about which of them matter.
+type Group struct {
+	Name   string
+	Lede   string
+	Fields []Field
+	// Optional groups start collapsed, because most files fill in none of them.
+	Optional bool
+}
+
+// Groups arranges the fields into the three questions the screen is really
+// asking, in the order somebody would answer them.
+var Groups = []Group{
+	{
+		Name:   "Which machine is each row about?",
+		Lede:   "Enough to recognise the host. A name or an address will do; both is better.",
+		Fields: []Field{FAssetName, FFQDN, FIP, FMAC, FOS, FSerial, FAssetType, FRole},
+	},
+	{
+		Name:   "What was found?",
+		Lede:   "This is the part that becomes a finding. A title or a CVE is required; everything else here is worth having if the file carries it.",
+		Fields: []Field{FTitle, FCVE, FSeverity, FCVSS, FStatus, FRuleID, FGroupID},
+	},
+	{
+		Name:     "Anything else the file carries",
+		Lede:     "None of this is needed. Map it if you have it and it will be kept with the finding.",
+		Fields:   []Field{FDescription, FFix, FDetails, FCheck, FComments, FCCI, FControl, FPort, FProtocol, FService, FFirstSeen, FLastSeen},
+		Optional: true,
+	},
+}
+
+// Hint is a sentence explaining what a field is for, in the terms of somebody
+// looking at their own spreadsheet rather than at ENCLAVE's data model.
+func (f Field) Hint() string {
+	switch f {
+	case FAssetName:
+		return "The hostname or device name, however your file writes it."
+	case FFQDN:
+		return "The full DNS name, if it is in a separate column."
+	case FIP:
+		return "Used to recognise the host, and to place it by address range."
+	case FOS:
+		return "Windows 11, RHEL 9, Cisco IOS XE. Used to guess the asset type."
+	case FSerial:
+		return "The most reliable way to recognise a machine across tools."
+	case FAssetType:
+		return "Server, workstation, network device. Guessed from the platform if absent."
+	case FTitle:
+		return "What the row says is wrong. Leave this unmapped if the file only has CVEs."
+	case FCVE:
+		return "CVE-2024-1086 and the like. A CVE is a complete finding on its own."
+	case FSeverity:
+		return "Critical, High, CAT I, a number: all understood. Taken from the CVSS score if absent."
+	case FCVSS:
+		return "A number from 0 to 10."
+	case FStatus:
+		return "Open, Pass, Fail, Not applicable. Every row counts as open if this is absent."
+	case FRuleID:
+		return "A plugin, QID or rule identifier. Used to recognise the same finding next month."
+	case FGroupID:
+		return "A V-number or vulnerability identifier, if separate from the rule."
+	case FFix:
+		return "The solution or remediation text."
+	case FDetails:
+		return "What the scanner actually observed on the host."
+	case FCCI:
+		return "Control Correlation Identifiers, which map STIG results to controls."
+	case FControl:
+		return "A control identifier the row already cites, such as AC-2."
+	case FFirstSeen:
+		return "When it was first detected. Finding age is measured from here."
+	case FLastSeen:
+		return "When it was last confirmed."
+	}
+	return ""
 }
 
 // Label describes a field for a person choosing columns.

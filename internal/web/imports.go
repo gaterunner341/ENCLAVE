@@ -96,7 +96,7 @@ func (s *Server) handleImportUpload(w http.ResponseWriter, r *http.Request) {
 			Title: "Map columns", Nav: "import", Enclave: e,
 			Data: map[string]any{
 				"Preview": preview, "Filename": header.Filename,
-				"Fields": ingest.Fields, "Options": opts,
+				"Fields": ingest.Fields, "Groups": ingest.Groups, "Options": opts,
 				"Payload":  base64.StdEncoding.EncodeToString(data),
 				"Enclaves": s.Store.Enclaves(),
 			},

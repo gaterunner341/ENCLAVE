@@ -2,10 +2,27 @@
 {{$d := .Data}}{{$p := $d.Preview}}
 <div class="page-head">
   <div class="grow">
-    <h1>Map the columns</h1>
-    <p class="lede">{{$d.Filename}} has {{len $p.Header}} columns and {{comma $p.Total}} rows.
-      The mapping below was worked out from the headings. Change anything that is wrong before
-      importing, because this decides what every row means.</p>
+    <h1>What is in your spreadsheet?</h1>
+    <p class="lede">ENCLAVE has read <strong>{{$d.Filename}}</strong> and found
+      {{len $p.Header}} columns and {{comma $p.Total}} rows. It does not know what your column
+      headings mean, so it has guessed, and it is showing you the guess before writing anything.
+      Correct anything wrong and press the button at the bottom.</p>
+  </div>
+</div>
+
+<div class="notice" id="mapping-status" data-role="status">
+  Choose which of your columns holds the <strong>finding title</strong> or the <strong>CVE</strong>.
+  One of the two is required. Everything else is optional.
+</div>
+
+<div class="card">
+  <header><h2>Your file, as it stands</h2><span class="spacer"></span>
+    <span style="color: var(--text-3); font-size: .8rem">first {{len $p.Rows}} of {{comma $p.Total}} rows</span></header>
+  <div class="table-wrap">
+    <table id="sample-rows">
+      <thead><tr>{{range $p.Header}}<th>{{.}}</th>{{end}}</tr></thead>
+      <tbody>{{range $p.Rows}}<tr>{{range .}}<td class="wrap" style="max-width: 20rem">{{truncate 70 .}}</td>{{end}}</tr>{{end}}</tbody>
+    </table>
   </div>
 </div>
 
@@ -20,62 +37,100 @@
 {{if $d.Options.CreateAssets}}<input type="hidden" name="create_assets" value="on">{{else}}<input type="hidden" name="create_assets" value="off">{{end}}
 {{if $d.Options.PlaceByAddress}}<input type="hidden" name="place_by_address" value="on">{{end}}
 
-<div class="card">
-  <header><h2>Columns</h2><span class="spacer"></span>
-    <span style="color: var(--text-3); font-size: .8rem">A finding title or a CVE is required. Either will do.</span></header>
-  <div class="card-body">
-    <div class="form-grid">
-      {{range $d.Fields}}
-      <div class="field">
-        <label for="map_{{.}}">{{.Label}}{{if .Required}} <span style="color: var(--bad)" title="a title or a CVE is required">*</span>{{end}}</label>
-        <select id="map_{{.}}" name="map_{{.}}">
-          <option value="">— not in this file —</option>
-          {{$sel := index $p.Mapping .}}
-          {{range $p.Header}}<option value="{{.}}" {{if eq . $sel}}selected{{end}}>{{.}}</option>{{end}}
-        </select>
+<div class="split">
+  <div>
+    {{range $d.Groups}}
+    <div class="card">
+      <header><h2>{{.Name}}</h2></header>
+      <div class="card-body">
+        <p style="color: var(--text-2); margin-top: 0">{{.Lede}}</p>
+        {{if .Optional}}
+        <details>
+          <summary style="cursor: pointer; color: var(--accent); margin-bottom: .75rem">
+            Show these {{len .Fields}} optional columns</summary>
+        {{end}}
+        <div class="form-grid">
+          {{range .Fields}}
+          <div class="field">
+            <label for="map_{{.}}">{{.Label}}
+              {{if .Required}}<span class="badge plain" style="font-weight: 600">one of these two</span>{{end}}
+              {{if .Hint}}<span class="hint">{{.Hint}}</span>{{end}}</label>
+            <select id="map_{{.}}" name="map_{{.}}" data-map-field="{{.}}" data-map-label="{{.Label}}">
+              <option value="">— not in this file —</option>
+              {{$sel := index $p.Mapping .}}
+              {{range $p.Header}}<option value="{{.}}" {{if eq . $sel}}selected{{end}}>{{.}}</option>{{end}}
+            </select>
+          </div>
+          {{end}}
+        </div>
+        {{if .Optional}}</details>{{end}}
       </div>
-      {{end}}
+    </div>
+    {{end}}
+
+    <div class="card">
+      <header><h2>Defaults for what the file does not say</h2></header>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field"><label for="title">Name this import
+            <span class="hint">So you can find it later, or undo it.</span></label>
+            <input type="text" id="title" name="title" placeholder="Imported results"></div>
+          <div class="field"><label for="kind">What kind of results are these?</label>
+            <select id="kind" name="kind">
+              <option value="vulnerability">A vulnerability scan</option>
+              <option value="stig">A STIG or benchmark review</option>
+              <option value="benchmark">A configuration benchmark</option>
+              <option value="import">Something else</option>
+            </select></div>
+          <div class="field"><label for="default_asset_name">Host name for rows that have none
+            <span class="hint">Only used if a row names no machine at all.</span></label>
+            <input type="text" id="default_asset_name" name="default_asset_name"></div>
+          <div class="field"><label for="default_asset_type">Asset type for hosts this creates</label>
+            <select id="default_asset_type" name="default_asset_type">
+              <option value="">Work it out from the platform</option>
+              {{range assetTypes}}<option value="{{.}}">{{.Label}}</option>{{end}}
+            </select></div>
+        </div>
+      </div>
     </div>
   </div>
-</div>
 
-<div class="card">
-  <header><h2>Defaults</h2></header>
-  <div class="card-body">
-    <div class="form-grid">
-      <div class="field"><label for="title">Import title</label>
-        <input type="text" id="title" name="title" placeholder="Imported results"></div>
-      <div class="field"><label for="kind">Kind</label>
-        <select id="kind" name="kind">
-          <option value="vulnerability">Vulnerability scan</option>
-          <option value="stig">STIG or benchmark review</option>
-          <option value="benchmark">Configuration benchmark</option>
-          <option value="import">Other</option>
-        </select></div>
-      <div class="field"><label for="default_asset_name">Asset name for rows that have none</label>
-        <input type="text" id="default_asset_name" name="default_asset_name"></div>
-      <div class="field"><label for="default_asset_type">Asset type for rows that have none</label>
-        <select id="default_asset_type" name="default_asset_type">
-          <option value="">Work it out from the platform</option>
-          {{range assetTypes}}<option value="{{.}}">{{.Label}}</option>{{end}}
-        </select></div>
+  <div>
+    <div class="card" id="row-preview" data-role="preview">
+      <header><h3>What your first row becomes</h3></header>
+      <div class="card-body">
+        <div data-role="preview-body">
+          <p style="color: var(--text-3); margin: 0">Choose columns and this will show what
+            ENCLAVE will make of the first row of your file.</p>
+        </div>
+      </div>
     </div>
-  </div>
-</div>
 
-<div class="card">
-  <header><h2>First rows as they will be read</h2></header>
-  <div class="table-wrap">
-    <table>
-      <thead><tr>{{range $p.Header}}<th>{{.}}</th>{{end}}</tr></thead>
-      <tbody>{{range $p.Rows}}<tr>{{range .}}<td class="wrap" style="max-width: 22rem">{{truncate 90 .}}</td>{{end}}</tr>{{end}}</tbody>
-    </table>
+    <div class="card">
+      <header><h3>Columns you have not mapped</h3></header>
+      <div class="card-body">
+        <p style="color: var(--text-2); font-size: .85rem; margin-top: 0">These are left out of
+          the import. Nothing is lost from your file; it just is not recorded.</p>
+        <div class="pill-row" data-role="unmapped"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h3>If none of this fits</h3></header>
+      <div class="card-body" style="color: var(--text-2); font-size: .85rem">
+        <p>A file only needs two things to be useful: something that names the machine, and
+          something that says what is wrong with it. A spreadsheet of hosts and CVEs is enough.</p>
+        <p style="margin: 0">If your file is a list of machines with no findings in it at all,
+          this is the wrong screen. Add the hosts on the enclave's Assets page instead, or
+          <a href="/import">go back</a>.</p>
+      </div>
+    </div>
   </div>
 </div>
 
 <div class="form-actions">
   <button class="btn primary" type="submit">Import {{comma $p.Total}} rows</button>
-  <a class="btn" href="/import">Cancel</a>
+  <a class="btn" href="/import">Start over</a>
 </div>
 </form>
 {{template "foot" .}}
