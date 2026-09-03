@@ -12,6 +12,7 @@ import (
 	"github.com/gaterunner341/enclave/internal/ingest"
 	"github.com/gaterunner341/enclave/internal/mapping"
 	"github.com/gaterunner341/enclave/internal/model"
+	"github.com/gaterunner341/enclave/internal/tenable"
 )
 
 // readCapped reads at most limit bytes and reports a clear error rather than
@@ -39,9 +40,13 @@ func (s *Server) handleImportForm(w http.ResponseWriter, r *http.Request) {
 	if a, ok := s.Store.Asset(assetID); ok {
 		selected = a.EnclaveID
 	}
+	// "How do results get in" is the question this page answers, so the
+	// connector belongs on it rather than only in the footer.
+	conn, _ := tenable.LoadConfig(s.Store.Dir())
 	s.render(w, r, "import.html", page{
 		Title: "Import scan results", Nav: "import",
 		Data: map[string]any{
+			"Connector":    conn,
 			"Enclaves":     enclaves,
 			"Selected":     selected,
 			"AssetID":      assetID,

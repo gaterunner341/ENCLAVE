@@ -183,8 +183,9 @@ There is also a read-only JSON API on the running server, at `/api/enclaves`,
 ## Pulling scans from Tenable Security Center
 
 By default ENCLAVE makes no outbound connection at all, and scan results arrive
-by upload. If you would rather it fetched them, open **Connectors** from the
-footer of any page.
+by upload. If you would rather it fetched them, click **Import** in the top
+navigation: that page offers both ways in, and the connector is the second of
+them. It is also linked from the footer of every page.
 
 You need the console's `https` address, an API key from it, and a decision about
 which enclave results belong to. Put the key in the environment rather than on

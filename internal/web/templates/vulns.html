@@ -92,7 +92,8 @@
     <p>Upload a vulnerability scan and they appear here. ENCLAVE reads Nessus and ACAS exports
        directly, and any spreadsheet with a CVE column. A single CVE can also be typed against a
        host from that host's page.</p>
-    {{if not .ReadOnly}}<a class="btn primary" href="/import">Upload a scan</a>{{end}}
+    {{if not .ReadOnly}}<a class="btn primary" href="/import">Upload a scan</a>
+    <a class="btn" href="/connectors">Or connect Tenable Security Center</a>{{end}}
   </div>
   {{end}}
 </div>

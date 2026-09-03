@@ -27,7 +27,8 @@ else. The banner changes to name the host it will reach.
 repositories you want. Keys are the documented way to authenticate and need no
 session.
 
-**In ENCLAVE**, open **Connectors** from the footer of any page and fill in:
+**In ENCLAVE**, click **Import** in the top navigation and choose the connector,
+or go to **Connectors** from the footer of any page. Fill in:
 
 - the console's address, which must be `https`
 - which enclave imported results belong to

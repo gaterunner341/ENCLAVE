@@ -1996,3 +1996,47 @@ func TestConnectorIsReadOnlySafe(t *testing.T) {
 		t.Errorf("read-only mode broke the connectors page: %d", code)
 	}
 }
+
+func TestTheConnectorIsFindableFromWhereSomebodyLooks(t *testing.T) {
+	h := newHarness(t)
+	// The question "how do scan results get in" is answered on the import page,
+	// so that is where the connector has to be, not only in the footer.
+	for _, path := range []string{"/import", "/vulnerabilities", "/enclaves/CORE/scans", "/data"} {
+		body := h.get(path).Body.String()
+		if strings.Contains(body, "could not be rendered") {
+			t.Fatalf("%s: %s", path, truncateBody(body))
+		}
+		if !strings.Contains(body, `href="/connectors"`) && !strings.Contains(body, `href="/connectors?list=1"`) {
+			t.Errorf("%s does not link to the connector", path)
+		}
+	}
+	// The import page names it, rather than hiding it behind an unlabelled link.
+	imp := h.get("/import").Body.String()
+	if !strings.Contains(imp, "Tenable Security Center") {
+		t.Error("the import page does not name what the connector connects to")
+	}
+	// And says which state it is in, since that is the thing somebody wants to
+	// know before clicking.
+	if !strings.Contains(imp, "no outbound connection") {
+		t.Error("the import page does not say the connector is off")
+	}
+
+	// With it on, the same card points at the console rather than at setup.
+	if err := tenableEnable(h); err != nil {
+		t.Fatal(err)
+	}
+	imp = h.get("/import").Body.String()
+	if !strings.Contains(imp, "securitycenter.example.org") {
+		t.Error("with the connector on, the import page should name the console")
+	}
+	if !strings.Contains(imp, "/connectors?list=1") {
+		t.Error("the import page should offer to list what is on the console")
+	}
+}
+
+func tenableEnable(h *harness) error {
+	return tenable.SaveConfig(h.Store.Dir(), tenable.Config{
+		Enabled: true, URL: "https://securitycenter.example.org",
+		EnclaveID: "CORE", CreateAssets: true,
+	})
+}

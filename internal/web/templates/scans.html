@@ -37,7 +37,8 @@
   <div class="empty">
     <h3>Nothing imported yet</h3>
     <p>ENCLAVE reads STIG checklists, SCAP results, Nessus and ACAS exports, and any spreadsheet
-       you can map columns for.</p>
+       you can map columns for. It can also pull completed scans from a
+       <a href="/connectors">Tenable Security Center</a> rather than you exporting them.</p>
     {{if not .ReadOnly}}<a class="btn primary" href="/import?enclave={{$e.ID}}">Import results</a>{{end}}
   </div>
   {{end}}

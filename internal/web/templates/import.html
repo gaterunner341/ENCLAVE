@@ -9,6 +9,33 @@
   </div>
 </div>
 
+<div class="card">
+  <header><h2>Two ways in</h2></header>
+  <div class="grid two" style="padding: 1rem; gap: 1rem">
+    <div>
+      <h3 style="margin-bottom: .35rem">Upload a file</h3>
+      <p style="color: var(--text-2); margin: 0">Export from whatever produced the results and put
+        the file through the form below. Works for every format, needs no network access, and is
+        the only option if ENCLAVE cannot reach your consoles.</p>
+    </div>
+    <div>
+      <h3 style="margin-bottom: .35rem">Pull from Tenable Security Center</h3>
+      {{if $d.Connector.Enabled}}
+      <p style="color: var(--text-2); margin: 0 0 .6rem">Connected to
+        <span class="mono">{{$d.Connector.Host}}</span>. List what is on the console and take
+        completed scans without exporting anything by hand.</p>
+      <a class="btn primary" href="/connectors?list=1">See what is on the console</a>
+      <a class="btn" href="/connectors">Settings</a>
+      {{else}}
+      <p style="color: var(--text-2); margin: 0 0 .6rem">Fetch completed scans over the Security
+        Center API instead of exporting them. Off at the moment, which is why ENCLAVE currently
+        makes no outbound connection at all.</p>
+      <a class="btn" href="/connectors">Set up the connector</a>
+      {{end}}
+    </div>
+  </div>
+</div>
+
 {{if not $d.Enclaves}}
 <div class="card"><div class="empty">
   <h3>Create an enclave first</h3>

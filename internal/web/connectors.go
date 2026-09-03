@@ -50,7 +50,7 @@ func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 	data["Pulled"] = firstN(pulled, 15)
 
 	s.render(w, r, "connectors.html", page{
-		Title: "Connectors", Nav: "connectors", Data: data,
+		Title: "Connectors", Nav: "import", Data: data,
 	})
 }
 
