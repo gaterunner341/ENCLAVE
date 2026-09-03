@@ -180,6 +180,31 @@ There is also a read-only JSON API on the running server, at `/api/enclaves`,
 
 ---
 
+## Pulling scans from Tenable Security Center
+
+By default ENCLAVE makes no outbound connection at all, and scan results arrive
+by upload. If you would rather it fetched them, open **Connectors** from the
+footer of any page.
+
+You need the console's `https` address, an API key from it, and a decision about
+which enclave results belong to. Put the key in the environment rather than on
+disk:
+
+```
+ENCLAVE_TENABLE_ACCESS_KEY=...
+ENCLAVE_TENABLE_SECRET_KEY=...
+```
+
+Then **Test the connection**, **List what is on the console**, and take what you
+want. On a schedule:
+
+```
+enclave tenable sync --since 30d
+```
+
+[docs/connectors.md](docs/connectors.md) covers certificates, credential
+handling and exactly what turning it on changes.
+
 ## Moving assets between enclaves
 
 The **Assets** page lists every host and network device on file, whichever

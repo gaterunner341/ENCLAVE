@@ -265,6 +265,10 @@ type Scan struct {
 	Tool        string `json:"tool,omitempty"`
 	Filename    string `json:"filename,omitempty"`
 	ImportedBy  string `json:"imported_by,omitempty"`
+	// SourceRef identifies the result on the system it was pulled from, so a
+	// connector can tell what it has already taken and never import the same
+	// scan twice.
+	SourceRef string `json:"source_ref,omitempty"`
 
 	ScanDate   time.Time `json:"scan_date"`
 	ImportedAt time.Time `json:"imported_at"`

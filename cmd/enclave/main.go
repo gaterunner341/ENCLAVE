@@ -25,6 +25,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -36,6 +37,7 @@ import (
 	"github.com/gaterunner341/enclave/internal/mapping"
 	"github.com/gaterunner341/enclave/internal/model"
 	"github.com/gaterunner341/enclave/internal/store"
+	"github.com/gaterunner341/enclave/internal/tenable"
 	"github.com/gaterunner341/enclave/internal/web"
 )
 
@@ -74,6 +76,8 @@ func run(args []string) error {
 		return cmdBackup(args)
 	case "restore":
 		return cmdRestore(args)
+	case "tenable":
+		return cmdTenable(args)
 	case "version", "--version", "-v":
 		fmt.Fprintln(stdout, "ENCLAVE "+version)
 		return nil
@@ -98,6 +102,7 @@ func usage() {
   enclave enclave list                        list enclaves
   enclave backup [-o FILE]                    write everything to one file
   enclave restore FILE                        replace everything from one file
+  enclave tenable test|list|import|sync       pull scans from a Security Center
   enclave version
 
 The data directory defaults to "enclave-data" beside the executable. Copy that
@@ -174,6 +179,14 @@ func cmdServe(args []string) error {
 	fmt.Printf("  listening %s\n", url)
 	if *readOnly {
 		fmt.Println("  mode      read only")
+	}
+	// Whether this instance talks to anything is the first thing somebody
+	// reviewing it wants to know, so it is said at startup rather than being
+	// discoverable only from a page.
+	if conn, err := tenable.LoadConfig(resolved); err == nil && conn.Enabled {
+		fmt.Printf("  connector Tenable Security Center at %s (outbound)\n", conn.Host())
+	} else {
+		fmt.Println("  network   no outbound connections")
 	}
 	if !isLoopback(*addr) {
 		fmt.Println()
@@ -572,6 +585,173 @@ func parseFlags(fs *flag.FlagSet, args []string) ([]string, error) {
 		positional = append(positional, fs.Arg(0))
 		rest = fs.Args()[1:]
 	}
+}
+
+// cmdTenable drives the Security Center connector, which is what to put on a
+// schedule if results should arrive without somebody pressing a button.
+func cmdTenable(args []string) error {
+	fs := flag.NewFlagSet("tenable", flag.ContinueOnError)
+	dir := fs.String("data", "", "data directory")
+	since := fs.String("since", "90d", "how far back to look, for example 30d or 12h")
+	limit := fs.Int("limit", 0, "stop after this many results, 0 for no limit")
+	force := fs.Bool("force", false, "take a result again even if it is already on file")
+	rest, err := parseFlags(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(rest) == 0 {
+		return fmt.Errorf("use `enclave tenable test`, `list`, `import ID...` or `sync`")
+	}
+	sub, ids := rest[0], rest[1:]
+
+	resolved, err := dataDir(*dir)
+	if err != nil {
+		return err
+	}
+	cfg, err := tenable.LoadConfig(resolved)
+	if err != nil {
+		return err
+	}
+	if !cfg.Enabled {
+		return fmt.Errorf(
+			"the connector is off; turn it on from the Connectors page, or by setting "+
+				"\"enabled\": true in %s",
+			filepath.Join(resolved, tenable.ConfigFile))
+	}
+	creds, err := tenable.LoadCredentials(resolved)
+	if err != nil {
+		return err
+	}
+	client, err := tenable.New(cfg, creds)
+	if err != nil {
+		return err
+	}
+	window, err := parseSince(*since)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout()*8)
+	defer cancel()
+
+	switch sub {
+	case "test":
+		desc, err := client.Test(ctx)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, desc)
+		return nil
+	}
+
+	st, cats, maps, err := open(resolved)
+	if err != nil {
+		return err
+	}
+	sync := &tenable.Syncer{
+		Store: st, Importer: importer.New(st, cats, maps), Client: client, Config: cfg,
+	}
+
+	switch sub {
+	case "list":
+		results, err := sync.Available(ctx, window)
+		if err != nil {
+			return err
+		}
+		w := csv.NewWriter(stdout)
+		defer w.Flush()
+		_ = w.Write([]string{"id", "name", "status", "repository", "finished", "hosts", "already imported"})
+		for _, r := range results {
+			_ = w.Write([]string{
+				r.ID, r.Name, r.Status, r.Repository, fmtDate(r.Finished),
+				fmt.Sprint(r.ScannedIPs), boolWord(r.Imported),
+			})
+		}
+		return nil
+
+	case "import":
+		if len(ids) == 0 {
+			return fmt.Errorf("give at least one scan result id; `enclave tenable list` shows them")
+		}
+		available, err := sync.Available(ctx, time.Time{})
+		if err != nil {
+			return err
+		}
+		byID := map[string]tenable.ScanResult{}
+		for _, r := range available {
+			byID[r.ID] = r
+		}
+		for _, id := range ids {
+			result, ok := byID[id]
+			if !ok {
+				return fmt.Errorf("scan result %s is not on the console", id)
+			}
+			out, err := sync.Import(ctx, result, *force)
+			if err != nil {
+				return err
+			}
+			if out.Skipped != "" {
+				fmt.Fprintf(stdout, "%s (%s): skipped, %s\n", result.Name, id, out.Skipped)
+				continue
+			}
+			fmt.Fprintf(stdout, "%s (%s): %d findings added, %d updated, %d assets created, %d matched\n",
+				result.Name, id, out.Summary.FindingsAdded, out.Summary.FindingsUpdated,
+				out.Summary.AssetsCreated, out.Summary.AssetsMatched)
+		}
+		return nil
+
+	case "sync":
+		rep, err := sync.SyncAll(ctx, window, *limit)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "checked %d, took %d, skipped %d, covering %d assets and %d findings\n",
+			rep.Checked, rep.Imported, rep.Skipped, rep.Assets, rep.Findings)
+		for _, e := range rep.Errors {
+			fmt.Fprintln(os.Stderr, "  could not take: "+e)
+		}
+		if len(rep.Errors) > 0 {
+			// A scheduled run should fail loudly enough for the scheduler to
+			// notice, while still having taken everything it could.
+			return fmt.Errorf("%d of %d results could not be taken", len(rep.Errors), rep.Checked)
+		}
+		return nil
+	}
+	return fmt.Errorf("unknown subcommand %q; use test, list, import or sync", sub)
+}
+
+// parseSince reads a window like 30d, 12h or 90m. A scheduled sync wants to ask
+// for what has happened since it last ran, in the units people think in.
+func parseSince(v string) (time.Time, error) {
+	v = strings.TrimSpace(strings.ToLower(v))
+	if v == "" || v == "all" {
+		return time.Time{}, nil
+	}
+	if strings.HasSuffix(v, "d") {
+		days, err := strconv.Atoi(strings.TrimSuffix(v, "d"))
+		if err != nil || days < 0 {
+			return time.Time{}, fmt.Errorf("--since %q should look like 30d, 12h or all", v)
+		}
+		return time.Now().AddDate(0, 0, -days), nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("--since %q should look like 30d, 12h or all", v)
+	}
+	return time.Now().Add(-d), nil
+}
+
+func fmtDate(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("2006-01-02")
+}
+
+func boolWord(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
 }
 
 // ownerName resolves whoever holds the System Owner role over an enclave.

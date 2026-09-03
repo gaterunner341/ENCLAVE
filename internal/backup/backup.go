@@ -154,12 +154,20 @@ func collect(dataDir string) ([]string, error) {
 	return out, nil
 }
 
+// excluded never travels in a bundle. Credentials for another system are the
+// one thing in the data directory that must not be copied around casually: a
+// backup gets emailed, and a Security Center key in it is a key anyone who
+// receives the file now holds.
+var excluded = map[string]bool{
+	"tenable-credentials.json": true,
+}
+
 // wanted decides whether a file belongs in a bundle.
 func wanted(rel string) bool {
 	if strings.HasPrefix(rel, BackupsDir+"/") || strings.HasPrefix(rel, ".") {
 		return false
 	}
-	if strings.HasSuffix(rel, ".tmp") {
+	if strings.HasSuffix(rel, ".tmp") || excluded[rel] {
 		return false
 	}
 	dir, _ := path.Split(rel)

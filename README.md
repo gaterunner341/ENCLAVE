@@ -9,7 +9,8 @@ you are supposed to be meeting, which ones are you actually meeting, and how do
 you know?**
 
 It is a single executable with no dependencies outside the Go standard library.
-No installer, no database engine, no service account, no outbound connection.
+No installer, no database engine, no service account, and no outbound connection
+unless you configure one.
 
 ## Get it
 
@@ -183,6 +184,18 @@ HD-2    | Unused services removed     | core,ext
 
 A CSV with `id` and `title` columns works too, as does an OSCAL catalog in JSON.
 
+## Connectors
+
+ENCLAVE makes no outbound connection unless you configure one, which is the
+state it ships in and what the startup banner reports. A Tenable Security Center
+connector can fetch completed scan results over the REST API instead of somebody
+exporting files: it authenticates with an API key, downloads the same `v2`
+export you would have taken by hand, and hands it to the same reader an uploaded
+file goes through. It records which result it took so nothing is imported twice,
+and credentials are kept out of backups.
+
+See [docs/connectors.md](docs/connectors.md).
+
 ## Upgrading
 
 Open **Data**, click **Download a backup**, start the new build, and restore the
@@ -204,6 +217,7 @@ before anything is written, and whatever a restore replaces is saved to
 - [docs/mappings.md](docs/mappings.md) — how findings reach controls, the CCI list, crosswalks between frameworks
 - [docs/risk-scoring.md](docs/risk-scoring.md) — exactly how the numbers are produced, and what they are not
 - [docs/data.md](docs/data.md) — the data folder, backups, restores and schema versions
+- [docs/connectors.md](docs/connectors.md) — pulling scans from Tenable Security Center, and what that changes
 
 ## Layout
 

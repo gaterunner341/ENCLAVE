@@ -19,6 +19,7 @@ import (
 	"github.com/gaterunner341/enclave/internal/model"
 	"github.com/gaterunner341/enclave/internal/risk"
 	"github.com/gaterunner341/enclave/internal/store"
+	"github.com/gaterunner341/enclave/internal/tenable"
 	"time"
 )
 
@@ -1852,5 +1853,146 @@ func TestPeopleAndEnclaveExports(t *testing.T) {
 		if rec.Code != http.StatusOK || !strings.HasPrefix(strings.TrimSpace(rec.Body.String()), "[") {
 			t.Errorf("api %s = %d", kind, rec.Code)
 		}
+	}
+}
+
+func TestConnectorIsOffAndSaysSo(t *testing.T) {
+	h := newHarness(t)
+	rec := h.get("/connectors")
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "could not be rendered") {
+		t.Fatalf("got %d: %s", rec.Code, truncateBody(rec.Body.String()))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "making no outbound connections") {
+		t.Error("the page should state plainly that nothing is reaching the network")
+	}
+	// The environment variables are named, because that is the way that writes
+	// no secret to disk.
+	if !strings.Contains(body, tenable.EnvAccessKey) {
+		t.Error("the page does not name the environment variables")
+	}
+	if !strings.Contains(h.get("/").Body.String(), `href="/connectors"`) {
+		t.Error("nothing links to the connectors page")
+	}
+}
+
+func TestConnectorConfigurationIsCheckedBeforeItIsStored(t *testing.T) {
+	h := newHarness(t)
+	for _, tc := range []struct {
+		name string
+		form url.Values
+		want string
+	}{
+		{"no address", url.Values{"enabled": {"on"}, "enclave_id": {"CORE"}}, "address"},
+		{"no enclave", url.Values{"enabled": {"on"}, "url": {"https://sc.example.org"}}, "enclave"},
+		{"plain http", url.Values{"enabled": {"on"}, "url": {"http://sc.example.org"}, "enclave_id": {"CORE"}}, "https"},
+	} {
+		rec := h.post("/connectors/save", tc.form)
+		loc := rec.Header().Get("Location")
+		if !strings.Contains(loc, "err=") || !strings.Contains(strings.ToLower(loc), tc.want) {
+			t.Errorf("%s: redirected to %q, expected an error about %q", tc.name, loc, tc.want)
+		}
+	}
+	cfg, err := tenable.LoadConfig(h.Store.Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Enabled {
+		t.Error("a configuration that cannot work was stored anyway")
+	}
+}
+
+func TestTurningTheConnectorOnAndOff(t *testing.T) {
+	h := newHarness(t)
+	rec := h.post("/connectors/save", url.Values{
+		"enabled": {"on"}, "url": {"https://securitycenter.example.org"},
+		"enclave_id": {"CORE"}, "create_assets": {"on"}, "place_by_address": {"on"},
+		"repositories": {"Production, Lab"},
+	})
+	if strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("save failed: %s", rec.Header().Get("Location"))
+	}
+	cfg, _ := tenable.LoadConfig(h.Store.Dir())
+	if !cfg.Enabled || cfg.EnclaveID != "CORE" || !cfg.PlaceByAddress {
+		t.Fatalf("settings were not stored: %+v", cfg)
+	}
+	if len(cfg.Repositories) != 2 {
+		t.Errorf("repositories = %v", cfg.Repositories)
+	}
+	// The page now warns that connections are being made.
+	if !strings.Contains(h.get("/connectors").Body.String(), "making outbound connections") {
+		t.Error("with the connector on, the page should say so")
+	}
+
+	// Turning it off returns to making none.
+	rec = h.post("/connectors/save", url.Values{
+		"url": {"https://securitycenter.example.org"}, "enclave_id": {"CORE"},
+	})
+	if strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("save failed: %s", rec.Header().Get("Location"))
+	}
+	cfg, _ = tenable.LoadConfig(h.Store.Dir())
+	if cfg.Enabled {
+		t.Error("the connector was not turned off")
+	}
+	if !strings.Contains(h.get("/connectors").Body.String(), "making no outbound connections") {
+		t.Error("the page does not reflect being turned off")
+	}
+}
+
+func TestStoringAndForgettingConnectorCredentials(t *testing.T) {
+	h := newHarness(t)
+	rec := h.post("/connectors/save", url.Values{
+		"enabled": {"on"}, "url": {"https://sc.example.org"}, "enclave_id": {"CORE"},
+		"access_key": {"AK"}, "secret_key": {"SK"}, "store_credentials": {"on"},
+	})
+	if strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("save failed: %s", rec.Header().Get("Location"))
+	}
+	if !tenable.CredentialsOnDisk(h.Store.Dir()) {
+		t.Fatal("the credentials were not stored")
+	}
+	// The page says where they are, rather than leaving somebody to find out.
+	if !strings.Contains(h.get("/connectors").Body.String(), "Stored in") {
+		t.Error("the page does not say that secrets are on disk")
+	}
+	// And they never appear in a page as a value that could be copied out.
+	if strings.Contains(h.get("/connectors").Body.String(), "SK") {
+		t.Error("the stored secret is rendered back into the page")
+	}
+
+	rec = h.post("/connectors/save", url.Values{
+		"enabled": {"on"}, "url": {"https://sc.example.org"}, "enclave_id": {"CORE"},
+		"forget_credentials": {"on"},
+	})
+	if strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("forget failed: %s", rec.Header().Get("Location"))
+	}
+	if tenable.CredentialsOnDisk(h.Store.Dir()) {
+		t.Error("the credentials were not forgotten")
+	}
+}
+
+func TestConnectorActionsRefuseWhenItIsOff(t *testing.T) {
+	h := newHarness(t)
+	for _, p := range []string{"/connectors/test", "/connectors/import"} {
+		rec := h.post(p, url.Values{"sync_all": {"on"}})
+		loc := rec.Header().Get("Location")
+		if !strings.Contains(loc, "err=") {
+			t.Errorf("%s should refuse while the connector is off, went to %q", p, loc)
+		}
+	}
+}
+
+func TestConnectorIsReadOnlySafe(t *testing.T) {
+	h := newHarness(t)
+	h.ReadOnly = true
+	for _, p := range []string{"/connectors/save", "/connectors/test", "/connectors/import"} {
+		if code := h.post(p, url.Values{}).Code; code != http.StatusForbidden {
+			t.Errorf("POST %s = %d in read-only mode, want 403", p, code)
+		}
+	}
+	if code := h.get("/connectors").Code; code != http.StatusOK {
+		t.Errorf("read-only mode broke the connectors page: %d", code)
 	}
 }

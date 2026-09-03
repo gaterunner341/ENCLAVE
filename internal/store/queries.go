@@ -328,6 +328,22 @@ func (s *Store) Scan(id string) (*model.Scan, bool) {
 	return sc, ok
 }
 
+// ScanBySourceRef finds an import by the identifier it carried on the system it
+// came from, which is how a connector knows what it has already taken.
+func (s *Store) ScanBySourceRef(ref string) (*model.Scan, bool) {
+	if strings.TrimSpace(ref) == "" {
+		return nil, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, sc := range s.scans {
+		if sc.SourceRef == ref {
+			return sc, true
+		}
+	}
+	return nil, false
+}
+
 // DeleteScan removes a scan and every finding it produced, which is the
 // correct way to undo a mistaken import.
 func (s *Store) DeleteScan(id string) error {

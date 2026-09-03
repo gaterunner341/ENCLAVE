@@ -71,6 +71,11 @@ than a scan, and says so rather than importing nothing silently.
 
 ## Nessus and ACAS
 
+Results can also be pulled from a Tenable Security Center over its API rather
+than exported by hand; see [connectors.md](connectors.md). What arrives that way
+goes through the reader described here, unchanged.
+
+
 `.nessus` exports are read as a token stream, so a several-hundred-megabyte
 export from a large estate is never held in memory as a tree.
 

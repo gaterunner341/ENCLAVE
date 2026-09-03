@@ -86,6 +86,11 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /enclaves/{id}/assets", s.handleAssetList)
 	m.HandleFunc("GET /enclaves/{id}/assets/new", s.handleAssetForm)
 	m.HandleFunc("POST /enclaves/{id}/assets/new", s.handleAssetSave)
+	m.HandleFunc("GET /connectors", s.handleConnectors)
+	m.HandleFunc("POST /connectors/save", s.handleConnectorSave)
+	m.HandleFunc("POST /connectors/test", s.handleConnectorTest)
+	m.HandleFunc("POST /connectors/import", s.handleConnectorImport)
+
 	m.HandleFunc("GET /people", s.handlePeople)
 	m.HandleFunc("GET /people/new", s.handlePersonForm)
 	m.HandleFunc("POST /people/new", s.handlePersonSave)

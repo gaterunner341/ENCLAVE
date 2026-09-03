@@ -404,3 +404,47 @@ func TestSavedBundlesAreNewestFirst(t *testing.T) {
 		t.Errorf("bundles should be listed newest first, got %v", got)
 	}
 }
+
+func TestCredentialsNeverTravelInABundle(t *testing.T) {
+	dir, _ := seed(t)
+	// A connector configured with its secrets stored on disk.
+	for name, body := range map[string]string{
+		"tenable.json":             `{"enabled":true,"url":"https://sc.example.org","enclave_id":"CORE"}`,
+		"tenable-credentials.json": `{"access_key":"AKIA-SECRET","secret_key":"very-secret"}`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	body := writeBundle(t, dir)
+
+	// The settings travel, because they are not secret and are worth keeping.
+	if !bytes.Contains(body, []byte("tenable.json")) {
+		t.Error("the connector settings should be in the bundle")
+	}
+	// The secrets do not, under any name, and nor does their content.
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range zr.File {
+		if strings.Contains(f.Name, "credentials") {
+			t.Errorf("a bundle carries %s, which holds a key for another system", f.Name)
+		}
+	}
+	if bytes.Contains(body, []byte("very-secret")) || bytes.Contains(body, []byte("AKIA-SECRET")) {
+		t.Error("the secret itself appears in the bundle")
+	}
+
+	// And restoring elsewhere does not conjure them up.
+	fresh := t.TempDir()
+	if _, err := Restore(fresh, bytes.NewReader(body), int64(len(body)), "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(fresh, "tenable-credentials.json")); !os.IsNotExist(err) {
+		t.Error("a restore produced a credentials file")
+	}
+	if _, err := os.Stat(filepath.Join(fresh, "tenable.json")); err != nil {
+		t.Error("the connector settings did not come across")
+	}
+}
