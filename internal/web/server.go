@@ -86,6 +86,8 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /enclaves/{id}/assets", s.handleAssetList)
 	m.HandleFunc("GET /enclaves/{id}/assets/new", s.handleAssetForm)
 	m.HandleFunc("POST /enclaves/{id}/assets/new", s.handleAssetSave)
+	m.HandleFunc("GET /assets/unplaced", s.handleUnplaced)
+	m.HandleFunc("POST /assets/move", s.handleMoveAssets)
 	m.HandleFunc("GET /assets/{aid}", s.handleAssetDetail)
 	m.HandleFunc("GET /assets/{aid}/edit", s.handleAssetForm)
 	m.HandleFunc("POST /assets/{aid}/edit", s.handleAssetSave)
@@ -127,6 +129,8 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /mappings/import", s.handleMappingImport)
 	m.HandleFunc("POST /mappings/{mid}/delete", s.handleMappingDelete)
 	m.HandleFunc("POST /mappings/reannotate", s.handleReannotate)
+
+	m.HandleFunc("POST /theme", s.handleTheme)
 
 	m.HandleFunc("GET /data", s.handleData)
 	m.HandleFunc("GET /data/backup", s.handleBackup)
@@ -207,12 +211,19 @@ type page struct {
 	Version  string
 	ReadOnly bool
 	Now      time.Time
+	// Theme is "light", "dark", or empty for whatever the system prefers. It is
+	// stamped on the root element so the first paint is already correct.
+	Theme string
+	// Path is where the reader is, so a preference set here returns here.
+	Path string
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, p page) {
 	p.Version = s.Version
 	p.ReadOnly = s.ReadOnly
 	p.Now = time.Now()
+	p.Theme = theme(r)
+	p.Path = safeReturn(r.URL.RequestURI())
 	if p.Flash == "" {
 		p.Flash = r.URL.Query().Get("ok")
 	}

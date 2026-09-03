@@ -144,6 +144,33 @@ loaded framework that actually contains that identifier — a spreadsheet saying
 "AC-2" does not say which framework it means, and the answer is "whichever ones
 have an AC-2".
 
+## Assets that end up nowhere
+
+Every list in ENCLAVE is drawn from an enclave, so an asset that is not in one
+appears on no page at all. That happens when an enclave identifier is renamed
+underneath its assets, when data is restored from somewhere else, or when the
+files are edited by hand.
+
+The **Unplaced assets** page, linked from the Enclaves page and from a warning on
+the overview when there are any, finds three things:
+
+- assets naming no enclave at all;
+- assets naming an enclave that is not on file;
+- assets whose addresses fall in none of the ranges their enclave claims, which
+  usually means either the asset or the enclave's ranges are wrong.
+
+Each one is shown with the enclave its addresses point to, if any, and can be
+moved there in a click. Findings move with the asset, so they stop counting
+towards the enclave it left.
+
+An asset in a nested range is not reported. A host at 10.20.9.5 filed under an
+enclave claiming 10.20.0.0/16 is inside a range that enclave claims, even if a
+second enclave claims 10.20.9.0/24 as well, and either is a defensible home.
+
+An asset with no address recorded cannot be checked either way, so it is not
+reported as misplaced. The page says how many of those there are rather than
+implying everything else has been verified.
+
 ## Placing assets across enclaves
 
 By default every asset in a file lands in the enclave you chose. Turning on

@@ -168,6 +168,14 @@ There is also a read-only JSON API on the running server, at `/api/enclaves`,
 
 ---
 
+## Appearance
+
+The footer of every page has an appearance control: **Light**, **Dark**, or
+**System**. System is the default and follows whatever your operating system is
+set to. The choice is remembered per browser and applied on the server, so pages
+render in the right colours from the first paint rather than flashing the wrong
+ones first.
+
 ## Where your data lives
 
 In a folder called `enclave-data` next to the executable.

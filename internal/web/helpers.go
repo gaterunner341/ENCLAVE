@@ -54,6 +54,14 @@ func (s *Server) funcs() template.FuncMap {
 			}
 			return int((bytes + 1023) / 1024)
 		},
+		// plural picks the right noun for a count, so a page never says
+		// "1 assets".
+		"plural": func(n int, one, many string) string {
+			if n == 1 {
+				return one
+			}
+			return many
+		},
 		"comma": func(n int) string {
 			s := strconv.Itoa(n)
 			if n < 0 {

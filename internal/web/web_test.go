@@ -1271,3 +1271,194 @@ func TestEveryMappableFieldHasALabel(t *testing.T) {
 		}
 	}
 }
+
+// orphan files an asset under an enclave that does not exist, which is the
+// state that makes it invisible on every other page.
+func orphan(t *testing.T, h *harness, name string, ips ...string) *model.Asset {
+	t.Helper()
+	a := &model.Asset{EnclaveID: "CORE", Name: name, Type: model.AssetServer, IPs: ips}
+	if err := h.Store.PutAsset(a); err != nil {
+		t.Fatal(err)
+	}
+	a.EnclaveID = "DECOMMISSIONED"
+	if err := h.Store.PutAsset(a); err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+func TestOrphanedAssetsAreFindable(t *testing.T) {
+	h := newHarness(t)
+	lost := orphan(t, h, "FORGOTTEN-01", "10.20.4.99")
+
+	// It is on no enclave page, which is the whole problem.
+	if strings.Contains(h.get("/enclaves/CORE/assets").Body.String(), lost.Name) {
+		t.Fatal("the fixture did not actually orphan the asset")
+	}
+	// The dashboard says so rather than leaving it silently lost.
+	dash := h.get("/").Body.String()
+	if !strings.Contains(dash, "in no enclave") || !strings.Contains(dash, "/assets/unplaced") {
+		t.Error("the overview does not warn that assets are unreachable")
+	}
+	// The enclaves page links to it whether or not there is a problem.
+	if !strings.Contains(h.get("/enclaves").Body.String(), "/assets/unplaced") {
+		t.Error("the enclaves page does not link to unplaced assets")
+	}
+
+	page := h.get("/assets/unplaced")
+	if page.Code != http.StatusOK {
+		t.Fatalf("got %d", page.Code)
+	}
+	body := page.Body.String()
+	if strings.Contains(body, "could not be rendered") {
+		t.Fatal(truncateBody(body))
+	}
+	if !strings.Contains(body, lost.Name) {
+		t.Error("the orphaned asset is not listed")
+	}
+	if !strings.Contains(body, "Not in any enclave") {
+		t.Error("the page does not say what is wrong")
+	}
+	// Its address is in an enclave's range, so the page says where it belongs.
+	if !strings.Contains(body, "Core Operations") {
+		t.Error("the page does not suggest where the asset belongs")
+	}
+}
+
+func TestMovingAnOrphanBringsItBack(t *testing.T) {
+	h := newHarness(t)
+	lost := orphan(t, h, "FORGOTTEN-01", "10.20.4.99")
+	if _, _, err := h.Store.PutFinding(&model.Finding{
+		EnclaveID: "DECOMMISSIONED", AssetID: lost.ID, Title: "something",
+		Fingerprint: "orphan-fp", Status: model.StatusOpen,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := h.post("/assets/move", url.Values{
+		"asset_ids": {lost.ID}, "enclave_id": {"CORE"}, "return": {"/assets/unplaced"},
+	})
+	if rec.Code != http.StatusSeeOther || strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("move = %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	if !strings.Contains(h.get("/enclaves/CORE/assets").Body.String(), lost.Name) {
+		t.Error("the asset did not come back onto its enclave page")
+	}
+	if len(h.Store.UnplacedAssets()) != 0 {
+		t.Error("it is still reported as unplaced")
+	}
+	// Its finding came with it, rather than being left counting towards nothing.
+	found := false
+	for _, f := range h.Store.Findings("CORE") {
+		if f.AssetID == lost.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the finding was left behind in the enclave that does not exist")
+	}
+	// The page now says there is nothing wrong.
+	if !strings.Contains(h.get("/assets/unplaced").Body.String(), "Nothing is out of place") {
+		t.Error("the page should say when everything is fine")
+	}
+}
+
+func TestMoveValidatesItsInput(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+	for _, tc := range []struct {
+		name string
+		form url.Values
+	}{
+		{"no assets", url.Values{"enclave_id": {"CORE"}}},
+		{"unknown enclave", url.Values{"asset_ids": {a.ID}, "enclave_id": {"NOPE"}}},
+	} {
+		rec := h.post("/assets/move", tc.form)
+		if !strings.Contains(rec.Header().Get("Location"), "err=") {
+			t.Errorf("%s should be refused, redirected to %q", tc.name, rec.Header().Get("Location"))
+		}
+	}
+}
+
+func TestAnAssetCannotBeSavedIntoAnEnclaveThatIsNotThere(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+	rec := h.post("/assets/"+a.ID+"/edit", url.Values{
+		"name": {a.Name}, "enclave_id": {"NOT-A-REAL-ENCLAVE"}, "type": {"server"},
+	})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "no enclave called") {
+		t.Errorf("saving into a missing enclave should come back on the form, got %d", rec.Code)
+	}
+	got, _ := h.Store.Asset(a.ID)
+	if got.EnclaveID != "CORE" {
+		t.Errorf("the asset was moved anyway, to %q", got.EnclaveID)
+	}
+}
+
+func TestThemeChoiceIsRememberedAndAppliedServerSide(t *testing.T) {
+	h := newHarness(t)
+	// No choice made: nothing is stamped, so the system preference decides.
+	body := h.get("/").Body.String()
+	if strings.Contains(body, "data-theme=") {
+		t.Error("with no choice made the page should not stamp a theme")
+	}
+	if !strings.Contains(body, `name="theme" value="dark"`) {
+		t.Error("the appearance control is missing")
+	}
+
+	rec := h.post("/theme", url.Values{"theme": {"dark"}, "return": {"/enclaves"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/enclaves" {
+		t.Errorf("returned to %q, want the page it was set from", got)
+	}
+	var cookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == themeCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil || cookie.Value != "dark" {
+		t.Fatalf("the choice was not stored: %v", cookie)
+	}
+	if !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode {
+		t.Error("the preference cookie should be HttpOnly and same-site")
+	}
+
+	// The choice is applied on the server, so the first paint is already right.
+	req := httptest.NewRequest("GET", "/", nil)
+	req.AddCookie(cookie)
+	rr := httptest.NewRecorder()
+	h.Handler().ServeHTTP(rr, req)
+	if !strings.Contains(rr.Body.String(), `data-theme="dark"`) {
+		t.Error("the stored choice is not stamped on the page")
+	}
+	if !strings.Contains(rr.Body.String(), `value="dark" aria-pressed="true"`) {
+		t.Error("the control does not show which choice is active")
+	}
+
+	// Going back to the system preference clears the cookie rather than storing
+	// a third value.
+	rec = h.post("/theme", url.Values{"theme": {""}, "return": {"/"}})
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == themeCookie && c.MaxAge >= 0 {
+			t.Error("choosing System should clear the stored preference")
+		}
+	}
+}
+
+func TestThemeReturnCannotLeaveTheSite(t *testing.T) {
+	h := newHarness(t)
+	for _, bad := range []string{
+		"https://example.com/", "//example.com/", "/\\example.com", "", "http://x",
+	} {
+		rec := h.post("/theme", url.Values{"theme": {"dark"}, "return": {bad}})
+		if got := rec.Header().Get("Location"); got != "/" {
+			t.Errorf("return %q redirected to %q, want /", bad, got)
+		}
+	}
+	if got := safeReturn("/enclaves/CORE?x=1"); got != "/enclaves/CORE?x=1" {
+		t.Errorf("a legitimate path was rejected: %q", got)
+	}
+}

@@ -7,6 +7,7 @@
       being measured against a control only a workstation could meet.</p>
   </div>
   <div>
+    <a class="btn" href="/assets/unplaced">Unplaced</a>
     <a class="btn" href="/export/assets?enclave={{$e.ID}}">Export</a>
     {{if not .ReadOnly}}<a class="btn" href="/enclaves/{{$e.ID}}/assets/new">Add by hand</a>
     <a class="btn primary" href="/import?enclave={{$e.ID}}">Import results</a>{{end}}

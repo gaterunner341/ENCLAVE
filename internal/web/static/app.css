@@ -45,8 +45,9 @@
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* Dark by system preference, unless light has been chosen explicitly. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg:          #0e1116;
     --surface:     #161b22;
     --surface-2:   #1d232c;
@@ -82,6 +83,44 @@
     --shadow: 0 1px 2px rgba(0,0,0,.4);
   }
 }
+
+/* Dark chosen explicitly, whatever the system says. */
+:root[data-theme="dark"] {
+    --bg:          #0e1116;
+    --surface:     #161b22;
+    --surface-2:   #1d232c;
+    --surface-3:   #262d38;
+    --border:      #2c333d;
+    --border-firm: #3c4450;
+    --text:        #e6edf3;
+    --text-2:      #a9b4c0;
+    --text-3:      #7d8894;
+
+    --accent:      #4f9cf0;
+    --accent-soft: #16283f;
+    --accent-text: #06121f;
+
+    --critical:    #f87171;
+    --high:        #fb923c;
+    --medium:      #fbbf24;
+    --low:         #a3e635;
+    --info:        #94a3b8;
+
+    --ok:          #4ade80;
+    --warn:        #fbbf24;
+    --bad:         #fb7185;
+
+    --contradicted: #f87171;
+    --failing:      #fb923c;
+    --gap:          #fbbf24;
+    --unassessed:   #64748b;
+    --planned:      #4f9cf0;
+    --claimed:      #86c9a4;
+    --satisfied:    #4ade80;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+
 
 * { box-sizing: border-box; }
 
@@ -382,6 +421,19 @@ footer.site {
   display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;
 }
 footer.site .spacer { flex: 1; }
+
+.theme-picker { display: inline-flex; align-items: center; gap: .3rem; }
+.theme-picker span { color: var(--text-3); }
+.theme-picker button {
+  font: inherit; font-size: .78rem; padding: .15rem .5rem; cursor: pointer;
+  color: var(--text-2); background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.theme-picker button:hover { background: var(--surface-2); color: var(--text); }
+.theme-picker button[aria-pressed="true"] {
+  background: var(--accent-soft); color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent); font-weight: 600;
+}
 
 @media print {
   .masthead, .subnav, .filters, .form-actions, footer.site, .no-print { display: none !important; }

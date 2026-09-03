@@ -263,3 +263,126 @@ func TestCountsSummarisesTheStore(t *testing.T) {
 		t.Errorf("got %+v", c)
 	}
 }
+
+func TestUnplacedFindsAssetsNoPageWouldShow(t *testing.T) {
+	s := open(t)
+	seedEnclave(t, s, "CORE", "10.20.0.0/16")
+	seedEnclave(t, s, "MGMT", "10.20.9.0/24")
+
+	fine := &model.Asset{EnclaveID: "CORE", Name: "in-range", IPs: []string{"10.20.4.1"}}
+	// A nested range is not a misfiling: 10.20.9.x is inside MGMT's /24 and
+	// also inside CORE's /16, and either enclave is a defensible home.
+	nested := &model.Asset{EnclaveID: "CORE", Name: "nested", IPs: []string{"10.20.9.5"}}
+	noAddress := &model.Asset{EnclaveID: "CORE", Name: "no-address"}
+	// Genuinely outside every range CORE claims. An address inside a nested,
+	// more specific enclave would still be inside CORE's own range, and being
+	// in a range your enclave claims is not a misfiling.
+	outside := &model.Asset{EnclaveID: "CORE", Name: "elsewhere", IPs: []string{"10.44.1.5"}}
+	stray := &model.Asset{EnclaveID: "GONE", Name: "dangling", IPs: []string{"10.20.4.2"}}
+	for _, a := range []*model.Asset{fine, nested, noAddress, outside, stray} {
+		if err := s.PutAsset(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An asset with no enclave at all, which the form will not create but
+	// restored or hand-edited data can contain.
+	nowhere := &model.Asset{ID: "loose", Name: "nowhere", IPs: []string{"192.0.2.9"}}
+	s.assets[nowhere.ID] = nowhere
+
+	got := map[string]Placement{}
+	for _, p := range s.UnplacedAssets() {
+		got[p.Asset.Name] = p
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 problems, got %d: %v", len(got), keysOf(got))
+	}
+	if _, ok := got["in-range"]; ok {
+		t.Error("an asset inside its enclave's range is not a problem")
+	}
+	if _, ok := got["nested"]; ok {
+		t.Error("an asset in a nested range is inside its enclave's range, so it is not misfiled")
+	}
+	if _, ok := got["no-address"]; ok {
+		t.Error("an asset with no address cannot be checked, so it is not reported as misplaced")
+	}
+	if got["dangling"].Problem != MissingEnclave {
+		t.Errorf("dangling = %q", got["dangling"].Problem)
+	}
+	if got["nowhere"].Problem != NoEnclave {
+		t.Errorf("nowhere = %q", got["nowhere"].Problem)
+	}
+	if got["elsewhere"].Problem != OutsideRanges {
+		t.Errorf("elsewhere = %q", got["elsewhere"].Problem)
+	}
+	// The suggestion is the enclave whose range actually contains it.
+	if got["elsewhere"].Suggested != nil {
+		t.Error("no enclave claims that address, so nothing should be suggested")
+	}
+	if s := got["dangling"].Suggested; s == nil || s.ID != "CORE" {
+		t.Errorf("dangling should be suggested for CORE, got %v", s)
+	}
+	if got["nowhere"].Suggested != nil {
+		t.Error("an address in nobody's range should suggest nothing")
+	}
+	// Orphans are the ones no page would show, and they sort first.
+	if s.OrphanCount() != 2 {
+		t.Errorf("orphan count = %d, want 2", s.OrphanCount())
+	}
+	list := s.UnplacedAssets()
+	if !list[0].Problem.Orphaned() || !list[1].Problem.Orphaned() {
+		t.Error("assets nobody can see should be listed first")
+	}
+}
+
+func TestEnclaveWithNoRangesPlacesNothingAndBlamesNobody(t *testing.T) {
+	s := open(t)
+	seedEnclave(t, s, "CORE")
+	a := &model.Asset{EnclaveID: "CORE", Name: "srv", IPs: []string{"10.1.1.1"}}
+	if err := s.PutAsset(a); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.UnplacedAssets(); len(got) != 0 {
+		t.Errorf("an enclave that declares no ranges cannot misplace anything, got %v", got)
+	}
+}
+
+func TestMoveAssetsTakesFindingsAlong(t *testing.T) {
+	s := open(t)
+	seedEnclave(t, s, "CORE", "10.20.0.0/16")
+	seedEnclave(t, s, "MGMT", "10.20.9.0/24")
+	a := &model.Asset{EnclaveID: "CORE", Name: "switch", IPs: []string{"10.20.9.2"}}
+	if err := s.PutAsset(a); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.PutFinding(&model.Finding{
+		EnclaveID: "CORE", AssetID: a.ID, Title: "f", Fingerprint: "fp", Status: model.StatusOpen,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	moved, err := s.MoveAssets([]string{a.ID}, "MGMT")
+	if err != nil || moved != 1 {
+		t.Fatalf("moved %d: %v", moved, err)
+	}
+	if len(s.Assets("CORE")) != 0 || len(s.Assets("MGMT")) != 1 {
+		t.Error("the asset did not change enclave")
+	}
+	if len(s.Findings("CORE")) != 0 || len(s.Findings("MGMT")) != 1 {
+		t.Error("the findings were left counting towards the enclave the asset left")
+	}
+	// And it is no longer reported as misplaced.
+	if got := s.UnplacedAssets(); len(got) != 0 {
+		t.Errorf("still reported after being moved: %v", got)
+	}
+	if _, err := s.MoveAssets([]string{a.ID}, "NOPE"); err == nil {
+		t.Error("moving into an enclave that does not exist should be refused")
+	}
+}
+
+func keysOf(m map[string]Placement) []string {
+	out := []string{}
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

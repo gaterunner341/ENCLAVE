@@ -88,6 +88,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			"AssetTotal": overallAssets,
 			"OpenTotal":  overallOpen,
 			"AssetIndex": s.assetIndex(),
+			"Orphans":    s.Store.OrphanCount(),
 		},
 	})
 }
@@ -127,7 +128,7 @@ func (s *Server) handleEnclaveList(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, r, "enclaves.html", page{
 		Title: "Enclaves", Nav: "enclaves",
-		Data: map[string]any{"Rows": rows},
+		Data: map[string]any{"Rows": rows, "Unplaced": len(s.Store.UnplacedAssets())},
 	})
 }
 

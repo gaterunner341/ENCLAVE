@@ -6,7 +6,10 @@
     <p class="lede">Each enclave is a bounded system with its own inventory, its own scan results
       and its own control baseline. Address ranges decide where an imported asset lands.</p>
   </div>
-  {{if not .ReadOnly}}<div><a class="btn primary" href="/enclaves/new">New enclave</a></div>{{end}}
+  <div>
+    <a class="btn {{if $d.Unplaced}}danger{{end}}" href="/assets/unplaced">Unplaced assets{{if $d.Unplaced}} ({{$d.Unplaced}}){{end}}</a>
+    {{if not .ReadOnly}}<a class="btn primary" href="/enclaves/new">New enclave</a>{{end}}
+  </div>
 </div>
 
 {{if not $d.Rows}}

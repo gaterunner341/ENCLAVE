@@ -24,6 +24,15 @@
     <div class="note">{{comma $d.Counts.Scans}} imports on file</div></div>
 </div>
 
+{{if $d.Orphans}}
+<div class="notice bad">
+  <strong>{{comma $d.Orphans}} {{plural $d.Orphans "asset is" "assets are"}} in no enclave.</strong>
+  Every list here is drawn from an enclave, so {{plural $d.Orphans "it appears" "they appear"}} on
+  no other page and {{plural $d.Orphans "counts" "count"}} towards nothing.
+  <a href="/assets/unplaced">Find them</a>.
+</div>
+{{end}}
+
 {{if not $d.Rows}}
 <div class="card"><div class="empty">
   <h3>No enclaves yet</h3>

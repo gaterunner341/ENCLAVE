@@ -232,6 +232,17 @@ func (s *Server) handleAssetSave(w http.ResponseWriter, r *http.Request) {
 	if v := f.str("enclave_id"); v != "" {
 		a.EnclaveID = v
 	}
+	// Filing an asset under an enclave that is not there makes it invisible on
+	// every page, so it is refused rather than accepted and later hunted down.
+	if _, ok := s.Store.Enclave(a.EnclaveID); !ok {
+		e, _ := s.Store.Enclave(r.PathValue("id"))
+		s.render(w, r, "asset_form.html", page{
+			Title: "Asset", Nav: "enclaves", SubNav: "assets", Enclave: e,
+			Error: "There is no enclave called " + a.EnclaveID + ". Choose one that exists.",
+			Data:  map[string]any{"Asset": a, "IsNew": a.ID == "", "Enclaves": s.Store.Enclaves()},
+		})
+		return
+	}
 	a.Name = f.str("name")
 	a.FQDN = f.str("fqdn")
 	a.Type = model.AssetType(f.str("type"))

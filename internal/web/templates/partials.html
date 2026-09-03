@@ -1,5 +1,5 @@
 {{define "head"}}<!doctype html>
-<html lang="en">
+<html lang="en"{{if .Theme}} data-theme="{{.Theme}}"{{end}}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -56,6 +56,13 @@
   <span>ENCLAVE {{.Version}}</span>
   <span><a href="/data">Back up or restore</a></span>
   <span class="spacer"></span>
+  <form class="theme-picker no-print" method="post" action="/theme">
+    <input type="hidden" name="return" value="{{.Path}}">
+    <span>Appearance</span>
+    <button type="submit" name="theme" value="light" aria-pressed="{{if eq .Theme "light"}}true{{else}}false{{end}}">Light</button>
+    <button type="submit" name="theme" value="dark" aria-pressed="{{if eq .Theme "dark"}}true{{else}}false{{end}}">Dark</button>
+    <button type="submit" name="theme" value="" aria-pressed="{{if eq .Theme ""}}true{{else}}false{{end}}">System</button>
+  </form>
   <span>Rendered {{datetime .Now}}</span>
 </footer>
 <script src="/static/app.js"></script>

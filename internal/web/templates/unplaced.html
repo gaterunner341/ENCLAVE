@@ -1,0 +1,118 @@
+{{template "head" .}}
+{{$d := .Data}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs"><a href="/enclaves">Enclaves</a></div>
+    <h1>Unplaced assets</h1>
+    <p class="lede">Every list in ENCLAVE is drawn from an enclave, so an asset that is not in one
+      appears nowhere. This page is where those turn up, along with assets whose addresses
+      disagree with the enclave they are filed under.</p>
+  </div>
+</div>
+
+{{if and (not $d.Orphaned) (not $d.Misfiled)}}
+<div class="card"><div class="empty">
+  <h3>Nothing is out of place</h3>
+  <p>All {{comma $d.Total}} assets are in an enclave that exists, and every one that has an
+     address sits inside a range that enclave claims.</p>
+  {{if $d.Unverifiable}}
+  <p style="color: var(--text-3)">{{comma $d.Unverifiable}} of them have no address recorded, so
+     their placement cannot be checked either way.</p>
+  {{end}}
+  <a class="btn" href="/enclaves">Back to enclaves</a>
+</div></div>
+{{end}}
+
+{{if $d.Orphaned}}
+<div class="card" style="border-color: color-mix(in srgb, var(--bad) 35%, var(--border))">
+  <header><h2 style="color: var(--bad)">Not in any enclave</h2><span class="spacer"></span>
+    <span class="badge sev-critical">{{len $d.Orphaned}}</span></header>
+  <div class="card-body" style="padding-bottom: 0">
+    <p style="color: var(--text-2)">These appear on no other page. They are counted in no
+      enclave's totals, measured against no baseline, and their findings count towards nothing.
+      Move them somewhere to bring them back.</p>
+  </div>
+  <form method="post" action="/assets/move">
+    <input type="hidden" name="return" value="/assets/unplaced">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width: 2rem"></th><th>Asset</th><th>Why</th>
+          <th>Addresses</th><th>Suggested enclave</th><th></th></tr></thead>
+        <tbody>
+        {{range $d.Orphaned}}
+        <tr>
+          <td><input type="checkbox" name="asset_ids" value="{{.Asset.ID}}" checked></td>
+          <td><a href="/assets/{{.Asset.ID}}"><strong>{{.Asset.DisplayName}}</strong></a>
+            <div style="color: var(--text-3); font-size: .78rem">{{.Asset.Type.Label}}{{if ne .Asset.Platform "Unknown"}} · {{truncate 40 .Asset.Platform}}{{end}}</div></td>
+          <td><span class="badge sev-high">{{.Problem.Label}}</span>
+            {{if eq (printf "%s" .Problem) "missing_enclave"}}
+            <div class="mono" style="color: var(--text-3); font-size: .76rem">{{.Asset.EnclaveID}}</div>{{end}}</td>
+          <td class="mono" style="font-size: .78rem">{{if .Asset.IPs}}{{join " " .Asset.IPs}}{{else}}<span style="color: var(--text-3)">none</span>{{end}}</td>
+          <td>{{if .Suggested}}<strong>{{.Suggested.Name}}</strong>
+              <div style="color: var(--text-3); font-size: .76rem">{{.Matched}} is in its range</div>
+              {{else}}<span style="color: var(--text-3)">no range matches</span>{{end}}</td>
+          <td><a class="btn small" href="/assets/{{.Asset.ID}}/edit">Edit</a></td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if not .ReadOnly}}
+    <div class="filters" style="border-top: 1px solid var(--border); border-bottom: none">
+      <div class="field"><label for="enclave_id">Move the ticked assets into</label>
+        <select id="enclave_id" name="enclave_id" required>
+          {{range $d.Enclaves}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+        </select></div>
+      <button class="btn primary" type="submit">Move them</button>
+      <span style="color: var(--text-3); font-size: .8rem">Their findings move with them.</span>
+    </div>
+    {{end}}
+  </form>
+</div>
+{{end}}
+
+{{if $d.Misfiled}}
+<div class="card">
+  <header><h2>Possibly in the wrong enclave</h2><span class="spacer"></span>
+    <span class="badge sev-medium">{{len $d.Misfiled}}</span></header>
+  <div class="card-body" style="padding-bottom: 0">
+    <p style="color: var(--text-2)">These are in an enclave, so they are counted and measured
+      normally. Their addresses just do not fall in any range that enclave claims. Either the
+      asset is filed in the wrong place, or the enclave's ranges are incomplete.</p>
+  </div>
+  <form method="post" action="/assets/move">
+    <input type="hidden" name="return" value="/assets/unplaced">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width: 2rem"></th><th>Asset</th><th>Filed under</th>
+          <th>Addresses</th><th>Addresses point to</th><th></th></tr></thead>
+        <tbody>
+        {{range $d.Misfiled}}
+        <tr>
+          <td><input type="checkbox" name="asset_ids" value="{{.Asset.ID}}"></td>
+          <td><a href="/assets/{{.Asset.ID}}"><strong>{{.Asset.DisplayName}}</strong></a></td>
+          <td>{{if .Claimed}}<a href="/enclaves/{{.Claimed.ID}}">{{.Claimed.Name}}</a>{{end}}</td>
+          <td class="mono" style="font-size: .78rem">{{join " " .Asset.IPs}}</td>
+          <td>{{if .Suggested}}<strong>{{.Suggested.Name}}</strong>
+              <div style="color: var(--text-3); font-size: .76rem">{{.Matched}} is in its range</div>
+              {{else}}<span style="color: var(--text-3)">no enclave claims these addresses</span>{{end}}</td>
+          <td>{{if .Claimed}}<a class="btn small" href="/enclaves/{{.Claimed.ID}}/edit">Ranges</a>{{end}}</td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if not .ReadOnly}}
+    <div class="filters" style="border-top: 1px solid var(--border); border-bottom: none">
+      <div class="field"><label for="misfiled_enclave">Move the ticked assets into</label>
+        <select id="misfiled_enclave" name="enclave_id" required>
+          {{range $d.Enclaves}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+        </select></div>
+      <button class="btn" type="submit">Move them</button>
+      <span style="color: var(--text-3); font-size: .8rem">Or add the missing range to the enclave instead.</span>
+    </div>
+    {{end}}
+  </form>
+</div>
+{{end}}
+{{template "foot" .}}
