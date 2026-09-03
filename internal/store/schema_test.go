@@ -233,3 +233,112 @@ func names(people []*model.Person) []string {
 	}
 	return out
 }
+
+func TestMigrationTurnsOneSetOfConnectorSettingsIntoAList(t *testing.T) {
+	dir := t.TempDir()
+	// A data set as the first connector release wrote it: schema 2, one console
+	// stored as though there could only ever be one, with its key beside it.
+	if err := os.WriteFile(filepath.Join(dir, "tenable.json"), []byte(`{
+	  "enabled": true, "url": "https://192.168.1.120:8834/", "enclave_id": "NET",
+	  "place_by_address": true, "create_assets": true, "insecure_skip_verify": true,
+	  "timeout_seconds": 120
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tenable-credentials.json"),
+		[]byte(`{"access_key":"AK123","secret_key":"SK456"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSON(filepath.Join(dir, stampFile), Stamp{Schema: 2, WrittenBy: "old"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Open(dir); err != nil {
+		t.Fatalf("data from the previous schema should open: %v", err)
+	}
+	if stamp, _, _ := ReadStamp(dir); stamp.Schema != SchemaVersion {
+		t.Errorf("schema = %d, want %d", stamp.Schema, SchemaVersion)
+	}
+
+	var connectors []map[string]any
+	b, err := os.ReadFile(filepath.Join(dir, "connectors.json"))
+	if err != nil {
+		t.Fatalf("the settings did not become a connector: %v", err)
+	}
+	if err := json.Unmarshal(b, &connectors); err != nil {
+		t.Fatal(err)
+	}
+	if len(connectors) != 1 {
+		t.Fatalf("got %d connectors, want 1", len(connectors))
+	}
+	c := connectors[0]
+	// It is named after the console it reaches, since the old shape carried no
+	// name at all.
+	if c["id"] != "192.168.1.120-8834" {
+		t.Errorf("id = %v", c["id"])
+	}
+	if c["name"] != "192.168.1.120:8834" {
+		t.Errorf("name = %v", c["name"])
+	}
+	for key, want := range map[string]any{
+		"enabled": true, "url": "https://192.168.1.120:8834/", "enclave_id": "NET",
+		"place_by_address": true, "create_assets": true, "insecure_skip_verify": true,
+		"kind": "tenable-sc",
+	} {
+		if c[key] != want {
+			t.Errorf("%s = %v, want %v", key, c[key], want)
+		}
+	}
+	if c["timeout_seconds"] != float64(120) {
+		t.Errorf("timeout = %v", c["timeout_seconds"])
+	}
+
+	// The stored key moved with it, keyed by the new identifier.
+	var creds map[string]map[string]string
+	b, err = os.ReadFile(filepath.Join(dir, "connector-credentials.json"))
+	if err != nil {
+		t.Fatalf("the stored key was lost: %v", err)
+	}
+	if err := json.Unmarshal(b, &creds); err != nil {
+		t.Fatal(err)
+	}
+	if creds["192.168.1.120-8834"]["access_key"] != "AK123" {
+		t.Errorf("credentials = %v", creds)
+	}
+	if info, err := os.Stat(filepath.Join(dir, "connector-credentials.json")); err != nil {
+		t.Fatal(err)
+	} else if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("the migrated credentials file is mode %o, want 600", perm)
+	}
+
+	// The old shapes are gone. A secret left behind for something nothing reads
+	// outlives the reason anybody had it.
+	for _, name := range []string{"tenable.json", "tenable-credentials.json"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Errorf("%s was left behind", name)
+		}
+	}
+
+	// Running again changes nothing.
+	if _, err := Open(dir); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile(filepath.Join(dir, "connectors.json"))
+	_ = json.Unmarshal(b, &connectors)
+	if len(connectors) != 1 {
+		t.Errorf("reopening duplicated the connector: %d", len(connectors))
+	}
+}
+
+func TestMigrationWithNoConnectorSettings(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeJSON(filepath.Join(dir, stampFile), Stamp{Schema: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(dir); err != nil {
+		t.Fatalf("a directory with no connector should migrate cleanly: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "connectors.json")); !os.IsNotExist(err) {
+		t.Error("a connector was invented where there was none")
+	}
+}

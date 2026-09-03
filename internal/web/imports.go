@@ -42,11 +42,12 @@ func (s *Server) handleImportForm(w http.ResponseWriter, r *http.Request) {
 	}
 	// "How do results get in" is the question this page answers, so the
 	// connector belongs on it rather than only in the footer.
-	conn, _ := tenable.LoadConfig(s.Store.Dir())
+	connOn, connLive := tenable.AnyEnabled(s.Store.Dir())
 	s.render(w, r, "import.html", page{
 		Title: "Import scan results", Nav: "import",
 		Data: map[string]any{
-			"Connector":    conn,
+			"ConnectorsOn": connOn,
+			"Connectors":   connLive,
 			"Enclaves":     enclaves,
 			"Selected":     selected,
 			"AssetID":      assetID,

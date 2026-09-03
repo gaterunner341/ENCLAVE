@@ -147,6 +147,10 @@ func (e *Enclave) Validate() error {
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$`)
 
+// IDPattern is the shape every identifier a person can choose has to take: safe
+// in a URL and safe as a filename.
+var IDPattern = idPattern
+
 // Asset is one host or network device inside an enclave. Hosts and network
 // devices share a record because they share almost every field that matters to
 // risk; Type is what keeps a switch from being measured against a control that

@@ -1,0 +1,177 @@
+{{template "head" .}}
+{{$d := .Data}}{{$c := $d.Connector}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs"><a href="/connectors">Connectors</a></div>
+    <h1>{{if $d.IsNew}}Add a connector{{else}}Edit {{$c.Name}}{{end}}</h1>
+    <p class="lede">A link to a Tenable Security Center that scan results can be pulled from.</p>
+  </div>
+  <div><button class="btn primary" type="submit" form="connector-form">Save</button></div>
+</div>
+
+<form method="post" id="connector-form" action="{{if $d.IsNew}}/connectors/new{{else}}/connectors/{{$c.ID}}/edit{{end}}">
+<div class="split">
+  <div>
+    <div class="card">
+      <header><h2>The console</h2></header>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label for="name">Name
+              <span class="hint">What you call this console, so a list of them reads sensibly.</span></label>
+            <input type="text" id="name" name="name" value="{{$c.Name}}" required autofocus
+                   placeholder="Production Security Center">
+          </div>
+          {{if $d.IsNew}}
+          <div class="field">
+            <label for="id">Identifier
+              <span class="hint">Used in URLs and in the environment variable names below.
+                Derived from the name if left blank.</span></label>
+            <input type="text" id="id" name="id" class="mono" placeholder="derived from the name">
+          </div>
+          {{end}}
+        </div>
+
+        <div class="field">
+          <label for="url">Address
+            <span class="hint">For example https://securitycenter.example.org. Must be https,
+              because the credentials and the results both cross the network.</span></label>
+          <input type="text" id="url" name="url" value="{{$c.URL}}" placeholder="https://securitycenter.example.org">
+        </div>
+
+        <div class="check">
+          <input type="checkbox" id="enabled" name="enabled" {{if $c.Enabled}}checked{{end}}>
+          <label for="enabled">Switched on
+            <span class="hint">While every connector is off, ENCLAVE opens no network connection
+              of any kind. Turning this off keeps the settings without using them.</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>What to do with what it fetches</h2></header>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label for="enclave_id">Results belong to</label>
+            <select id="enclave_id" name="enclave_id">
+              <option value="">Choose an enclave</option>
+              {{range $d.Enclaves}}<option value="{{.ID}}" {{if eq .ID $c.EnclaveID}}selected{{end}}>{{.Name}}</option>{{end}}
+            </select>
+          </div>
+          <div class="field">
+            <label for="repositories">Repositories
+              <span class="hint">Comma separated. Blank takes them all.</span></label>
+            <input type="text" id="repositories" name="repositories" value="{{join ", " $c.Repositories}}">
+          </div>
+          <div class="field">
+            <label for="timeout_seconds">Request timeout, seconds
+              <span class="hint">A large download legitimately takes a while. Blank means 300.</span></label>
+            <input type="number" id="timeout_seconds" name="timeout_seconds" min="10"
+                   value="{{if $c.TimeoutSeconds}}{{$c.TimeoutSeconds}}{{end}}">
+          </div>
+        </div>
+        <div class="check">
+          <input type="checkbox" id="create_assets" name="create_assets" {{if $c.CreateAssets}}checked{{end}}>
+          <label for="create_assets">Add hosts that are not yet in the inventory</label>
+        </div>
+        <div class="check">
+          <input type="checkbox" id="place_by_address" name="place_by_address" {{if $c.PlaceByAddress}}checked{{end}}>
+          <label for="place_by_address">Place hosts by address range
+            <span class="hint">Route each host to the enclave whose network range contains it,
+              falling back to the one above. What a scan spanning several enclaves needs.</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>Credentials</h2></header>
+      <div class="card-body">
+        <p style="color: var(--text-2); margin-top: 0">
+          In use: <strong>{{$d.Credentials.Source}}</strong>.
+          {{if $d.FromEnv}}They come from the environment, so nothing needs to be typed here.
+          {{else if $d.OnDisk}}Stored in <span class="mono">{{$d.Dir}}</span>, readable only by
+            this account.{{else}}Nothing is stored for this connector yet.{{end}}
+        </p>
+        <p style="color: var(--text-2); font-size: .85rem">
+          The way that writes no secret to disk is to set
+          <span class="mono">{{$d.EnvAccess}}</span> and <span class="mono">{{$d.EnvSecret}}</span>
+          in the environment ENCLAVE runs in. With one console,
+          <span class="mono">{{$d.PlainAccess}}</span> and <span class="mono">{{$d.PlainSecret}}</span>
+          work too. Either always wins over anything stored here.
+        </p>
+        <p style="color: var(--text-2); font-size: .85rem">
+          Anything typed below is saved when you save the connector, in plain text, readable only
+          by the account ENCLAVE runs as, and left out of backups.
+        </p>
+        <div class="form-grid">
+          <div class="field"><label for="access_key">Access key</label>
+            <input type="text" id="access_key" name="access_key" class="mono" autocomplete="off"></div>
+          <div class="field"><label for="secret_key">Secret key</label>
+            <input type="password" id="secret_key" name="secret_key" autocomplete="off"></div>
+          <div class="field"><label for="username">Username
+            <span class="hint">Only for consoles too old for API keys.</span></label>
+            <input type="text" id="username" name="username" autocomplete="off"></div>
+          <div class="field"><label for="password">Password</label>
+            <input type="password" id="password" name="password" autocomplete="off"></div>
+        </div>
+        {{if $d.OnDisk}}
+        <div class="check">
+          <input type="checkbox" id="forget_credentials" name="forget_credentials">
+          <label for="forget_credentials">Forget the credentials stored for this connector</label>
+        </div>
+        {{end}}
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>Certificates</h2></header>
+      <div class="card-body">
+        <div class="field">
+          <label for="ca_cert_file">Certificate authority file
+            <span class="hint">A PEM bundle to verify the console against. This is what an
+              appliance with an internal certificate authority needs.</span></label>
+          <input type="text" id="ca_cert_file" name="ca_cert_file" class="mono" value="{{$c.CACertFile}}"
+                 placeholder="/etc/pki/ca-trust/source/anchors/internal-ca.pem">
+        </div>
+        <div class="check">
+          <input type="checkbox" id="insecure_skip_verify" name="insecure_skip_verify" {{if $c.InsecureSkipVerify}}checked{{end}}>
+          <label for="insecure_skip_verify">Do not verify the certificate
+            <span class="hint">Accepts whatever certificate the console presents, including one
+              an attacker substituted. Self-signed appliance certificates are common, so this
+              exists; point at the file above instead where you can.</span></label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>What switching this on changes</h3></header>
+      <div class="card-body" style="color: var(--text-2); font-size: .85rem">
+        <p>With every connector off, ENCLAVE opens no sockets outward at all, which is most of why
+          it is straightforward to run on a network that does not allow that.</p>
+        <p>With this one on, it connects to the address above when somebody presses a button or
+          runs the command. It does not poll and it has no timer of its own.</p>
+        <p style="margin: 0">The startup banner reports which of the two states it is in, every
+          time it starts.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="form-actions">
+  <button class="btn primary" type="submit">{{if $d.IsNew}}Add connector{{else}}Save{{end}}</button>
+  <a class="btn" href="/connectors">Cancel</a>
+</div>
+</form>
+
+{{if not $d.IsNew}}
+<form method="post" action="/connectors/{{$c.ID}}/delete" style="margin-top: 1.5rem"
+      data-confirm="Remove {{$c.Name}} and any credentials stored for it?">
+  <button class="btn danger" type="submit">Remove this connector</button>
+  <span style="color: var(--text-3); margin-left: .5rem">Its credentials go with it. Results
+    already imported are kept.</span>
+</form>
+{{end}}
+{{template "foot" .}}

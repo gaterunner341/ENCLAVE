@@ -159,6 +159,9 @@ func collect(dataDir string) ([]string, error) {
 // backup gets emailed, and a Security Center key in it is a key anyone who
 // receives the file now holds.
 var excluded = map[string]bool{
+	"connector-credentials.json": true,
+	// The name the first version used, so a bundle taken from data that has not
+	// been upgraded yet is just as safe.
 	"tenable-credentials.json": true,
 }
 

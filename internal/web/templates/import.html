@@ -20,12 +20,12 @@
     </div>
     <div>
       <h3 style="margin-bottom: .35rem">Pull from Tenable Security Center</h3>
-      {{if $d.Connector.Enabled}}
-      <p style="color: var(--text-2); margin: 0 0 .6rem">Connected to
-        <span class="mono">{{$d.Connector.Host}}</span>. List what is on the console and take
-        completed scans without exporting anything by hand.</p>
-      <a class="btn primary" href="/connectors?list=1">See what is on the console</a>
-      <a class="btn" href="/connectors">Settings</a>
+      {{if $d.ConnectorsOn}}
+      <p style="color: var(--text-2); margin: 0 0 .6rem">
+        {{range $d.Connectors}}<span class="mono">{{.Host}}</span> {{end}}
+        {{plural (len $d.Connectors) "is connected" "are connected"}}. List what is on a console
+        and take completed scans without exporting anything by hand.</p>
+      <a class="btn primary" href="/connectors">Go to connectors</a>
       {{else}}
       <p style="color: var(--text-2); margin: 0 0 .6rem">Fetch completed scans over the Security
         Center API instead of exporting them. Off at the moment, which is why ENCLAVE currently

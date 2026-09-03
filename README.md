@@ -187,12 +187,14 @@ A CSV with `id` and `title` columns works too, as does an OSCAL catalog in JSON.
 ## Connectors
 
 ENCLAVE makes no outbound connection unless you configure one, which is the
-state it ships in and what the startup banner reports. A Tenable Security Center
-connector can fetch completed scan results over the REST API instead of somebody
-exporting files: it authenticates with an API key, downloads the same `v2`
+state it ships in and what the startup banner reports. Connectors are a list you
+add to and remove from, each switched on or off on its own. A Tenable Security
+Center connector fetches completed scan results over the REST API instead of
+somebody exporting files: it authenticates with an API key, downloads the same `v2`
 export you would have taken by hand, and hands it to the same reader an uploaded
 file goes through. It records which result it took so nothing is imported twice,
-and credentials are kept out of backups.
+and credentials, kept per connector and out of backups, are removed with the
+connector they belong to.
 
 See [docs/connectors.md](docs/connectors.md).
 

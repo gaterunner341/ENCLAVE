@@ -11,7 +11,7 @@ import (
 // SchemaVersion is the layout of the data directory that this build writes and
 // understands. It goes up whenever a change would stop an older build reading
 // what a newer one wrote, which is the only thing that makes an upgrade unsafe.
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // stampFile records what wrote the data directory, so that a build can tell
 // whether it is looking at data it understands before it touches any of it.
@@ -96,6 +96,11 @@ var migrations = []migration{
 		from: 1, to: 2,
 		describe: "points of contact become a directory of people",
 		apply:    migrateContactsToPeople,
+	},
+	{
+		from: 2, to: 3,
+		describe: "the single set of connector settings becomes a list",
+		apply:    migrateConnectorSettings,
 	},
 }
 

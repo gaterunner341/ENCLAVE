@@ -28,26 +28,35 @@ repositories you want. Keys are the documented way to authenticate and need no
 session.
 
 **In ENCLAVE**, click **Import** in the top navigation and choose the connector,
-or go to **Connectors** from the footer of any page. Fill in:
+or go to **Connectors** from the footer of any page, then **Add a connector**.
+Connectors are a list: add as many as you have consoles, switch each on or off
+independently, and remove one when it is no longer wanted. Fill in:
 
+- a name, so a list of them reads sensibly
 - the console's address, which must be `https`
 - which enclave imported results belong to
 - optionally, which repositories to offer, and whether to place hosts by
   address range
 
-**Credentials.** The way that writes no secret to disk is to set them in the
-environment ENCLAVE runs in:
+**Credentials.** These are per connector. The way that writes no secret to disk
+is to set them in the environment ENCLAVE runs in:
 
 ```
 ENCLAVE_TENABLE_ACCESS_KEY=...
 ENCLAVE_TENABLE_SECRET_KEY=...
 ```
 
-These always win over anything stored. If setting environment variables is not
-practical, the page can store them in `tenable-credentials.json` in the data
-directory. That file is written readable only by the account ENCLAVE runs as,
-and it is deliberately excluded from backups: a bundle gets emailed, and a key
-inside one is a key everybody who receives it now holds.
+With more than one console, name the connector in the variable so each has its
+own, for example `ENCLAVE_TENABLE_PROD_ACCESS_KEY` for a connector whose
+identifier is `prod`. The connector's own variable wins over the plain one, and
+either wins over anything stored.
+
+Anything typed into the form is stored when you save the connector, in
+`connector-credentials.json`, keyed by that connector. There is no separate box
+to tick: typing a key in is the intent to store it. That file is written
+readable only by the account ENCLAVE runs as, and it is excluded from backups,
+because a bundle gets emailed and a key inside one is a key everybody who
+receives it now holds. Removing a connector removes its credentials with it.
 
 For a console too old for API keys, a username and password work through the
 `/rest/token` endpoint instead.
@@ -78,7 +87,10 @@ enclave tenable list
 enclave tenable import 101 102
 enclave tenable sync --since 30d
 enclave tenable sync --since 30d --limit 10
+enclave tenable sync --connector prod --since 30d
 ```
+
+`--connector` is needed only when more than one is switched on.
 
 `sync` exits non-zero if any result could not be taken, having still taken
 everything it could, so a scheduler notices.

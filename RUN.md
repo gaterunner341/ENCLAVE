@@ -187,9 +187,10 @@ by upload. If you would rather it fetched them, click **Import** in the top
 navigation: that page offers both ways in, and the connector is the second of
 them. It is also linked from the footer of every page.
 
-You need the console's `https` address, an API key from it, and a decision about
-which enclave results belong to. Put the key in the environment rather than on
-disk:
+Add a connector, give it a name, and fill in the console's `https` address, an
+API key from it, and which enclave results belong to. Add as many as you have
+consoles; each can be switched on or off, and removed, on its own. Put the key
+in the environment rather than on disk:
 
 ```
 ENCLAVE_TENABLE_ACCESS_KEY=...

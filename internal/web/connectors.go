@@ -10,37 +10,65 @@ import (
 	"github.com/gaterunner341/enclave/internal/tenable"
 )
 
-// handleConnectors is where the one outbound connection ENCLAVE can make is
-// turned on, configured and used.
+// handleConnectors lists what has been set up. Connectors are things with
+// identities that can be added and removed, not one set of settings pretending
+// there can only ever be one console.
 func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
-	cfg, cfgErr := tenable.LoadConfig(s.Store.Dir())
-	creds, credErr := tenable.LoadCredentials(s.Store.Dir())
-
+	dir := s.Store.Dir()
+	all, err := tenable.LoadConnectors(dir)
 	data := map[string]any{
-		"Config": cfg, "Credentials": creds,
-		"OnDisk":    tenable.CredentialsOnDisk(s.Store.Dir()),
-		"Enclaves":  s.Store.Enclaves(),
-		"EnvAccess": tenable.EnvAccessKey, "EnvSecret": tenable.EnvSecretKey,
-		"Dir": s.Store.Dir(),
+		"Connectors": all,
+		"EnvAccess":  tenable.EnvAccessKey,
+		"EnvSecret":  tenable.EnvSecretKey,
+		"Dir":        dir,
 	}
-	if cfgErr != nil {
-		data["ConfigError"] = cfgErr.Error()
+	if err != nil {
+		data["LoadError"] = err.Error()
 	}
-	if credErr != nil {
-		data["CredentialError"] = credErr.Error()
+	live := 0
+	type row struct {
+		Connector   *tenable.Connector
+		Credentials string
+		OnDisk      bool
+		Enclave     *model.Enclave
+		Imports     int
 	}
+	rows := make([]row, 0, len(all))
+	for _, c := range all {
+		if c.Enabled {
+			live++
+		}
+		creds, _ := tenable.LoadCredentials(dir, c.ID)
+		rw := row{
+			Connector: c, Credentials: creds.Source(),
+			OnDisk: tenable.CredentialsOnDisk(dir, c.ID),
+		}
+		if e, ok := s.Store.Enclave(c.EnclaveID); ok {
+			rw.Enclave = e
+		}
+		for _, sc := range s.Store.Scans("") {
+			if strings.HasPrefix(sc.SourceRef, tenable.SourceName+":") &&
+				strings.Contains(sc.Notes, c.Host()) {
+				rw.Imports++
+			}
+		}
+		rows = append(rows, rw)
+	}
+	data["Rows"] = rows
+	data["Live"] = live
 
-	// Listing what is on the console is a live call, so it happens only when
-	// asked for rather than on every visit to the page.
-	if r.URL.Query().Get("list") == "1" && cfg.Enabled {
-		results, err := s.tenableResults(r.Context(), cfg, creds)
+	// Listing what is on a console is a live call, so it happens only when
+	// asked for rather than on every visit.
+	if id := r.URL.Query().Get("list"); id != "" {
+		results, host, err := s.tenableList(r.Context(), dir, id)
 		if err != nil {
 			data["ListError"] = err.Error()
 		} else {
 			data["Results"] = results
+			data["ListedID"] = id
+			data["ListedHost"] = host
 		}
 	}
-	// Imports the connector has already made, so the page shows its own history.
 	pulled := []*model.Scan{}
 	for _, sc := range s.Store.Scans("") {
 		if tenable.FromScan(sc) {
@@ -49,32 +77,96 @@ func (s *Server) handleConnectors(w http.ResponseWriter, r *http.Request) {
 	}
 	data["Pulled"] = firstN(pulled, 15)
 
-	s.render(w, r, "connectors.html", page{
-		Title: "Connectors", Nav: "import", Data: data,
+	s.render(w, r, "connectors.html", page{Title: "Connectors", Nav: "import", Data: data})
+}
+
+func (s *Server) tenableList(ctx context.Context, dir, id string) ([]tenable.ScanResult, string, error) {
+	sync, conn, err := s.syncer(dir, id)
+	if err != nil {
+		return nil, "", err
+	}
+	results, err := sync.Available(ctx, time.Now().AddDate(0, 0, -90))
+	return results, conn.Host(), err
+}
+
+// syncer builds everything needed to talk to one connector.
+func (s *Server) syncer(dir, id string) (*tenable.Syncer, *tenable.Connector, error) {
+	conn, err := tenable.GetConnector(dir, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !conn.Enabled {
+		return nil, nil, errConnectorOff(conn)
+	}
+	creds, err := tenable.LoadCredentials(dir, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	client, err := tenable.New(conn, creds)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &tenable.Syncer{
+		Store: s.Store, Importer: s.Importer, Client: client, Config: conn,
+	}, conn, nil
+}
+
+func errConnectorOff(c *tenable.Connector) error {
+	return &offError{name: c.Name}
+}
+
+type offError struct{ name string }
+
+func (e *offError) Error() string {
+	return e.name + " is switched off, so nothing will be fetched through it."
+}
+
+// handleConnectorForm adds one or edits an existing one.
+func (s *Server) handleConnectorForm(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r) {
+		return
+	}
+	dir := s.Store.Dir()
+	conn := &tenable.Connector{Kind: tenable.KindSecurityCenter, CreateAssets: true, Enabled: true}
+	isNew := true
+	if id := r.PathValue("cid"); id != "" {
+		found, err := tenable.GetConnector(dir, id)
+		if err != nil {
+			s.fail(w, r, http.StatusNotFound, "No connector with that identifier.")
+			return
+		}
+		conn, isNew = found, false
+	}
+	creds, _ := tenable.LoadCredentials(dir, conn.ID)
+	envA, envS, _, _ := tenable.EnvNames(conn.ID)
+	s.render(w, r, "connector_form.html", page{
+		Title: connectorTitle(conn, isNew), Nav: "import",
+		Data: s.connectorFormData(conn, isNew, creds, envA, envS),
 	})
 }
 
-func (s *Server) tenableResults(ctx context.Context, cfg tenable.Config, creds tenable.Credentials) ([]tenable.ScanResult, error) {
-	sync, err := s.tenableSyncer(cfg, creds)
-	if err != nil {
-		return nil, err
+func connectorTitle(c *tenable.Connector, isNew bool) string {
+	if isNew {
+		return "Add a connector"
 	}
-	// Ninety days is enough history to find what somebody is looking for
-	// without asking a busy console for everything it has ever run.
-	return sync.Available(ctx, time.Now().AddDate(0, 0, -90))
+	return "Edit " + c.Name
 }
 
-func (s *Server) tenableSyncer(cfg tenable.Config, creds tenable.Credentials) (*tenable.Syncer, error) {
-	client, err := tenable.New(cfg, creds)
-	if err != nil {
-		return nil, err
+func (s *Server) connectorFormData(c *tenable.Connector, isNew bool, creds tenable.Credentials, envA, envS string) map[string]any {
+	dir := s.Store.Dir()
+	return map[string]any{
+		"Connector": c, "IsNew": isNew,
+		"Enclaves":    s.Store.Enclaves(),
+		"Credentials": creds,
+		"OnDisk":      !isNew && tenable.CredentialsOnDisk(dir, c.ID),
+		"FromEnv":     !isNew && tenable.FromEnvironment(c.ID),
+		"EnvAccess":   envA, "EnvSecret": envS,
+		"PlainAccess": tenable.EnvAccessKey, "PlainSecret": tenable.EnvSecretKey,
+		"Dir": dir,
 	}
-	return &tenable.Syncer{
-		Store: s.Store, Importer: s.Importer, Client: client, Config: cfg,
-	}, nil
 }
 
-// handleConnectorSave records the settings. Nothing here reaches the network.
+// handleConnectorSave writes one connector. Nothing here reaches the network.
 func (s *Server) handleConnectorSave(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r) {
 		return
@@ -85,88 +177,116 @@ func (s *Server) handleConnectorSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := s.Store.Dir()
-	cfg, _ := tenable.LoadConfig(dir)
-	cfg.Enabled = f.bool("enabled")
-	cfg.URL = f.str("url")
-	cfg.EnclaveID = f.str("enclave_id")
-	cfg.PlaceByAddress = f.bool("place_by_address")
-	cfg.CreateAssets = f.bool("create_assets")
-	cfg.Repositories = f.csv("repositories")
-	cfg.CACertFile = f.str("ca_cert_file")
-	cfg.InsecureSkipVerify = f.bool("insecure_skip_verify")
-	cfg.TimeoutSeconds = f.int("timeout_seconds", 0)
+	id := r.PathValue("cid")
+	isNew := id == ""
 
-	if err := cfg.Validate(); err != nil {
-		redirect(w, r, "/connectors", "", err.Error())
-		return
+	conn := &tenable.Connector{Kind: tenable.KindSecurityCenter}
+	if !isNew {
+		existing, err := tenable.GetConnector(dir, id)
+		if err != nil {
+			s.fail(w, r, http.StatusNotFound, "No connector with that identifier.")
+			return
+		}
+		conn = existing
 	}
-	if err := tenable.SaveConfig(dir, cfg); err != nil {
-		redirect(w, r, "/connectors", "", err.Error())
-		return
+	conn.Name = f.str("name")
+	if isNew {
+		conn.ID = model.SlugID(firstNonBlank(f.str("id"), f.str("name")))
 	}
+	conn.Enabled = f.bool("enabled")
+	conn.URL = f.str("url")
+	conn.EnclaveID = f.str("enclave_id")
+	conn.PlaceByAddress = f.bool("place_by_address")
+	conn.CreateAssets = f.bool("create_assets")
+	conn.Repositories = f.csv("repositories")
+	conn.CACertFile = f.str("ca_cert_file")
+	conn.InsecureSkipVerify = f.bool("insecure_skip_verify")
+	conn.TimeoutSeconds = f.int("timeout_seconds", 0)
 
-	// Credentials are handled separately, because writing a secret to disk is a
-	// decision somebody makes rather than a side effect of saving a form.
 	access, secret := f.str("access_key"), f.str("secret_key")
 	user, pass := f.str("username"), f.str("password")
-	switch {
-	case f.bool("forget_credentials"):
-		if err := tenable.ForgetCredentials(dir); err != nil {
-			redirect(w, r, "/connectors", "", err.Error())
-			return
-		}
-		redirect(w, r, "/connectors", "Saved. The stored credentials were removed.", "")
-		return
-	case f.bool("store_credentials") && (access != "" || user != ""):
-		creds := tenable.Credentials{AccessKey: access, SecretKey: secret, Username: user, Password: pass}
-		if err := tenable.SaveCredentials(dir, creds); err != nil {
-			redirect(w, r, "/connectors", "", err.Error())
-			return
-		}
-		redirect(w, r, "/connectors",
-			"Saved. The credentials are on disk in "+dir+", readable only by this account.", "")
+	creds := tenable.Credentials{AccessKey: access, SecretKey: secret, Username: user, Password: pass}
+	envA, envS, _, _ := tenable.EnvNames(conn.ID)
+
+	if err := tenable.SaveConnector(dir, conn); err != nil {
+		s.render(w, r, "connector_form.html", page{
+			Title: connectorTitle(conn, isNew), Nav: "import", Error: err.Error(),
+			Data: s.connectorFormData(conn, isNew, creds, envA, envS),
+		})
 		return
 	}
-	msg := "Saved."
-	if !cfg.Enabled {
-		msg += " The connector is off, so ENCLAVE makes no outbound connection."
+
+	msg := "Saved " + conn.Name + "."
+	switch {
+	case f.bool("forget_credentials"):
+		if err := tenable.ForgetCredentials(dir, conn.ID); err != nil {
+			redirect(w, r, "/connectors", "", err.Error())
+			return
+		}
+		msg += " The stored credentials were removed."
+	case creds.Complete():
+		// Typing a key into the form is the intent to store it. Asking for a
+		// separate tick and silently discarding what was typed without it was
+		// a trap, and lost the secret with no word about it.
+		if err := tenable.SaveCredentials(dir, conn.ID, creds); err != nil {
+			redirect(w, r, "/connectors", "", err.Error())
+			return
+		}
+		msg += " The credentials are stored in " + dir + ", readable only by this account."
+	case access != "" || secret != "" || user != "" || pass != "":
+		// Half a credential is not a credential, and dropping it silently is
+		// how somebody ends up wondering why nothing works.
+		redirect(w, r, "/connectors/"+conn.ID+"/edit", "",
+			"Nothing was stored: an access key needs its secret key, and a username needs its password.")
+		return
+	}
+	if !conn.Enabled {
+		msg += " It is switched off, so nothing is fetched through it."
 	}
 	redirect(w, r, "/connectors", msg, "")
 }
 
-// handleConnectorTest makes one call, so that a misconfiguration is found here
+// handleConnectorDelete removes one, and its credentials with it.
+func (s *Server) handleConnectorDelete(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r) {
+		return
+	}
+	dir := s.Store.Dir()
+	conn, err := tenable.GetConnector(dir, r.PathValue("cid"))
+	if err != nil {
+		s.fail(w, r, http.StatusNotFound, "No connector with that identifier.")
+		return
+	}
+	if err := tenable.DeleteConnector(dir, conn.ID); err != nil {
+		redirect(w, r, "/connectors", "", err.Error())
+		return
+	}
+	msg := "Removed " + conn.Name + ", and any credentials stored for it."
+	msg += " Results already imported through it are untouched."
+	redirect(w, r, "/connectors", msg, "")
+}
+
+// handleConnectorTest makes one call, so a misconfiguration is found here
 // rather than halfway through an import.
 func (s *Server) handleConnectorTest(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r) {
 		return
 	}
-	cfg, err := tenable.LoadConfig(s.Store.Dir())
+	dir := s.Store.Dir()
+	id := r.PathValue("cid")
+	sync, conn, err := s.syncer(dir, id)
 	if err != nil {
 		redirect(w, r, "/connectors", "", err.Error())
 		return
 	}
-	if !cfg.Enabled {
-		redirect(w, r, "/connectors", "", "Turn the connector on before testing it.")
-		return
-	}
-	creds, err := tenable.LoadCredentials(s.Store.Dir())
-	if err != nil {
-		redirect(w, r, "/connectors", "", err.Error())
-		return
-	}
-	client, err := tenable.New(cfg, creds)
-	if err != nil {
-		redirect(w, r, "/connectors", "", err.Error())
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), cfg.Timeout())
+	ctx, cancel := context.WithTimeout(r.Context(), conn.Timeout())
 	defer cancel()
-	desc, err := client.Test(ctx)
+	desc, err := sync.Client.Test(ctx)
 	if err != nil {
-		redirect(w, r, "/connectors", "", err.Error())
+		redirect(w, r, "/connectors", "", conn.Name+": "+err.Error())
 		return
 	}
-	redirect(w, r, "/connectors?list=1", "Working: "+desc+".", "")
+	redirect(w, r, "/connectors?list="+urlEscape(id), conn.Name+" is working: "+desc+".", "")
 }
 
 // handleConnectorImport pulls the chosen results, or everything outstanding.
@@ -180,61 +300,47 @@ func (s *Server) handleConnectorImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := s.Store.Dir()
-	cfg, err := tenable.LoadConfig(dir)
-	if err != nil || !cfg.Enabled {
-		redirect(w, r, "/connectors", "", "The connector is not turned on.")
-		return
-	}
-	creds, err := tenable.LoadCredentials(dir)
+	id := r.PathValue("cid")
+	sync, conn, err := s.syncer(dir, id)
 	if err != nil {
 		redirect(w, r, "/connectors", "", err.Error())
 		return
 	}
-	sync, err := s.tenableSyncer(cfg, creds)
-	if err != nil {
-		redirect(w, r, "/connectors", "", err.Error())
-		return
-	}
-	// A download of a large console can legitimately take minutes, so the
-	// deadline is the configured timeout per result rather than the request.
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout()*4)
+	// A download of a busy console legitimately takes minutes.
+	ctx, cancel := context.WithTimeout(context.Background(), conn.Timeout()*4)
 	defer cancel()
+	back := "/connectors?list=" + urlEscape(id)
 
 	if f.bool("sync_all") {
 		rep, err := sync.SyncAll(ctx, time.Now().AddDate(0, 0, -90), 25)
 		if err != nil {
-			redirect(w, r, "/connectors", "", err.Error())
+			redirect(w, r, "/connectors", "", conn.Name+": "+err.Error())
 			return
 		}
-		msg := describeSync(rep)
-		errMsg := ""
-		if len(rep.Errors) > 0 {
-			errMsg = "Some results could not be taken: " + strings.Join(rep.Errors, "; ")
-		}
-		recordSync(dir, cfg)
-		redirect(w, r, "/connectors?list=1", msg, errMsg)
+		tenable.RecordSync(dir, id)
+		redirect(w, r, back, describeSync(conn, rep), joinErrors(rep.Errors))
 		return
 	}
 
 	ids := f.list("result_ids")
 	if len(ids) == 0 {
-		redirect(w, r, "/connectors?list=1", "", "Choose which scan results to take.")
+		redirect(w, r, back, "", "Choose which scan results to take.")
 		return
 	}
 	available, err := sync.Available(ctx, time.Now().AddDate(0, 0, -365))
 	if err != nil {
-		redirect(w, r, "/connectors", "", err.Error())
+		redirect(w, r, "/connectors", "", conn.Name+": "+err.Error())
 		return
 	}
 	byID := map[string]tenable.ScanResult{}
-	for _, r := range available {
-		byID[r.ID] = r
+	for _, res := range available {
+		byID[res.ID] = res
 	}
 	rep := &tenable.SyncReport{}
-	for _, id := range ids {
-		result, ok := byID[id]
+	for _, want := range ids {
+		result, ok := byID[want]
 		if !ok {
-			rep.Errors = append(rep.Errors, "scan result "+id+" is no longer on the console")
+			rep.Errors = append(rep.Errors, "scan result "+want+" is no longer on the console")
 			continue
 		}
 		rep.Checked++
@@ -251,29 +357,27 @@ func (s *Server) handleConnectorImport(w http.ResponseWriter, r *http.Request) {
 		rep.Findings += out.Summary.FindingsAdded + out.Summary.FindingsUpdated
 		rep.Assets += out.Summary.AssetsCreated + out.Summary.AssetsMatched
 	}
-	errMsg := ""
-	if len(rep.Errors) > 0 {
-		errMsg = strings.Join(rep.Errors, "; ")
+	tenable.RecordSync(dir, id)
+	redirect(w, r, back, describeSync(conn, rep), joinErrors(rep.Errors))
+}
+
+func joinErrors(errs []string) string {
+	if len(errs) == 0 {
+		return ""
 	}
-	recordSync(dir, cfg)
-	redirect(w, r, "/connectors?list=1", describeSync(rep), errMsg)
+	return "Some results could not be taken: " + strings.Join(errs, "; ")
 }
 
-func recordSync(dir string, cfg tenable.Config) {
-	now := time.Now().UTC()
-	cfg.LastSync = &now
-	_ = tenable.SaveConfig(dir, cfg)
-}
-
-func describeSync(rep *tenable.SyncReport) string {
+func describeSync(conn *tenable.Connector, rep *tenable.SyncReport) string {
 	if rep.Imported == 0 {
 		if rep.Skipped > 0 {
-			return "Nothing new: everything checked was already on file or still running."
+			return "Nothing new from " + conn.Name + ": everything checked was already on file or still running."
 		}
-		return "Nothing was taken."
+		return "Nothing was taken from " + conn.Name + "."
 	}
 	return plural(rep.Imported, "Took 1 scan result", "Took "+itoa(rep.Imported)+" scan results") +
-		", covering " + itoa(rep.Assets) + " assets and " + itoa(rep.Findings) + " findings."
+		" from " + conn.Name + ", covering " + itoa(rep.Assets) + " assets and " +
+		itoa(rep.Findings) + " findings."
 }
 
 func plural(n int, one, many string) string {

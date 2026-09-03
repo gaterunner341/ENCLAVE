@@ -20,7 +20,7 @@ type Syncer struct {
 	Store    *store.Store
 	Importer *importer.Importer
 	Client   *Client
-	Config   Config
+	Config   *Connector
 }
 
 // Available lists what is on the Security Center, marking what has already been

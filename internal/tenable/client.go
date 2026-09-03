@@ -24,7 +24,7 @@ const MaxDownload = 512 << 20
 
 // Client talks to one Security Center.
 type Client struct {
-	cfg   Config
+	cfg   *Connector
 	creds Credentials
 	http  *http.Client
 
@@ -36,14 +36,16 @@ type Client struct {
 
 // New builds a client. It does not connect; nothing reaches the network until a
 // method is called.
-func New(cfg Config, creds Credentials) (*Client, error) {
+func New(cfg *Connector, creds Credentials) (*Client, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	if !creds.Complete() {
+		envA, envS, _, _ := EnvNames(cfg.ID)
 		return nil, fmt.Errorf(
-			"no credentials: set %s and %s, or store them from the connector page",
-			EnvAccessKey, EnvSecretKey)
+			"%s has no credentials. Enter an access key and secret key on its page, "+
+				"or set %s and %s in the environment ENCLAVE runs in",
+			cfg.Name, envA, envS)
 	}
 	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
 	if cfg.CACertFile != "" {
@@ -429,7 +431,7 @@ func unzipResult(raw []byte, id string) ([]byte, string, error) {
 
 // describeDialError turns a transport failure into something actionable, since
 // the usual one is a certificate an appliance signed itself.
-func describeDialError(cfg Config, err error) error {
+func describeDialError(cfg *Connector, err error) error {
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "x509") || strings.Contains(msg, "certificate"):

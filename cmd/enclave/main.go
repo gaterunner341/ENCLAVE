@@ -183,8 +183,10 @@ func cmdServe(args []string) error {
 	// Whether this instance talks to anything is the first thing somebody
 	// reviewing it wants to know, so it is said at startup rather than being
 	// discoverable only from a page.
-	if conn, err := tenable.LoadConfig(resolved); err == nil && conn.Enabled {
-		fmt.Printf("  connector Tenable Security Center at %s (outbound)\n", conn.Host())
+	if on, live := tenable.AnyEnabled(resolved); on {
+		for _, c := range live {
+			fmt.Printf("  connector %s at %s (outbound)\n", c.Name, c.Host())
+		}
 	} else {
 		fmt.Println("  network   no outbound connections")
 	}
@@ -587,6 +589,37 @@ func parseFlags(fs *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
+// pickConnector resolves which console to talk to. Naming one is only necessary
+// when more than one is switched on, so the common case of a single console
+// needs no flag.
+func pickConnector(dir, id string) (*tenable.Connector, error) {
+	if id != "" {
+		c, err := tenable.GetConnector(dir, id)
+		if err != nil {
+			return nil, err
+		}
+		if !c.Enabled {
+			return nil, fmt.Errorf("%s is switched off", c.Name)
+		}
+		return c, nil
+	}
+	on, live := tenable.AnyEnabled(dir)
+	if !on {
+		return nil, fmt.Errorf(
+			"no connector is switched on; add one on the Connectors page, or in %s",
+			filepath.Join(dir, tenable.ConnectorsFile))
+	}
+	if len(live) > 1 {
+		names := []string{}
+		for _, c := range live {
+			names = append(names, c.ID)
+		}
+		return nil, fmt.Errorf("more than one connector is on; choose with --connector: %s",
+			strings.Join(names, ", "))
+	}
+	return live[0], nil
+}
+
 // cmdTenable drives the Security Center connector, which is what to put on a
 // schedule if results should arrive without somebody pressing a button.
 func cmdTenable(args []string) error {
@@ -595,6 +628,7 @@ func cmdTenable(args []string) error {
 	since := fs.String("since", "90d", "how far back to look, for example 30d or 12h")
 	limit := fs.Int("limit", 0, "stop after this many results, 0 for no limit")
 	force := fs.Bool("force", false, "take a result again even if it is already on file")
+	connector := fs.String("connector", "", "which connector to use; needed only when there is more than one")
 	rest, err := parseFlags(fs, args)
 	if err != nil {
 		return err
@@ -608,17 +642,18 @@ func cmdTenable(args []string) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := tenable.LoadConfig(resolved)
+	// The store is opened first because that is what brings a data directory up
+	// to the current schema. Resolving a connector before it would look for the
+	// list in a directory that still holds the shape it replaced.
+	st, cats, maps, err := open(resolved)
 	if err != nil {
 		return err
 	}
-	if !cfg.Enabled {
-		return fmt.Errorf(
-			"the connector is off; turn it on from the Connectors page, or by setting "+
-				"\"enabled\": true in %s",
-			filepath.Join(resolved, tenable.ConfigFile))
+	cfg, err := pickConnector(resolved, *connector)
+	if err != nil {
+		return err
 	}
-	creds, err := tenable.LoadCredentials(resolved)
+	creds, err := tenable.LoadCredentials(resolved, cfg.ID)
 	if err != nil {
 		return err
 	}
@@ -643,10 +678,6 @@ func cmdTenable(args []string) error {
 		return nil
 	}
 
-	st, cats, maps, err := open(resolved)
-	if err != nil {
-		return err
-	}
 	sync := &tenable.Syncer{
 		Store: st, Importer: importer.New(st, cats, maps), Client: client, Config: cfg,
 	}

@@ -318,3 +318,72 @@ func TestRestoreNeedsExactlyOneFile(t *testing.T) {
 		t.Error("restore with two files should be an error")
 	}
 }
+
+func TestTenableCommandUpgradesTheDataDirectoryFirst(t *testing.T) {
+	dir := t.TempDir()
+	// A data directory written before connectors were a list. The command has
+	// to bring it up to date before it looks for one, or it reports that
+	// nothing is configured when something is.
+	if err := os.WriteFile(filepath.Join(dir, "tenable.json"), []byte(`{
+	  "enabled": true, "url": "https://sc.example.org", "enclave_id": "CORE"
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "schema.json"),
+		[]byte(`{"schema":2,"written_by":"old"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "enclaves.json"),
+		[]byte(`[{"id":"CORE","name":"Core","created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// It fails for want of credentials, which is the right failure: it means
+	// the connector itself was found.
+	_, err := capture(t, dir, "tenable", "list")
+	if err == nil {
+		t.Fatal("expected a failure for want of credentials")
+	}
+	if strings.Contains(err.Error(), "no connector is switched on") {
+		t.Fatalf("the migrated connector was not found: %v", err)
+	}
+	if !strings.Contains(err.Error(), "credentials") {
+		t.Fatalf("unexpected failure: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "connectors.json")); statErr != nil {
+		t.Errorf("the directory was not upgraded: %v", statErr)
+	}
+}
+
+func TestTenableCommandNamesTheConnectorWhenThereAreSeveral(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := capture(t, dir, "enclave", "add", "--id", "CORE", "--name", "Core"); err != nil {
+		t.Fatal(err)
+	}
+	body := `[
+	  {"id":"prod","name":"Production","kind":"tenable-sc","enabled":true,
+	   "url":"https://prod.example.org","enclave_id":"CORE"},
+	  {"id":"lab","name":"Lab","kind":"tenable-sc","enabled":true,
+	   "url":"https://lab.example.org","enclave_id":"CORE"}
+	]`
+	if err := os.WriteFile(filepath.Join(dir, "connectors.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := capture(t, dir, "tenable", "list")
+	if err == nil || !strings.Contains(err.Error(), "--connector") {
+		t.Fatalf("with two consoles on, the command should ask which: %v", err)
+	}
+	if !strings.Contains(err.Error(), "prod") || !strings.Contains(err.Error(), "lab") {
+		t.Errorf("the message should name the choices: %v", err)
+	}
+	// Naming one gets past that, and fails only for want of credentials.
+	_, err = capture(t, dir, "tenable", "list", "--connector", "prod")
+	if err == nil || !strings.Contains(err.Error(), "credentials") {
+		t.Errorf("naming a connector should get as far as its credentials: %v", err)
+	}
+	// An identifier that names nothing says so.
+	_, err = capture(t, dir, "tenable", "list", "--connector", "nope")
+	if err == nil || !strings.Contains(err.Error(), "nope") {
+		t.Errorf("an unknown connector should be named in the error: %v", err)
+	}
+}

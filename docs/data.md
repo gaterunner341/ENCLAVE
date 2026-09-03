@@ -15,6 +15,7 @@ enclave-data/
   findings.json      every scan result, with its history and decisions
   assessments.json   control implementation statements
   risks.json         the risk register
+  connectors.json    links to outside systems results can be pulled from
   people.json        the directory of who holds which post
   roles.json         the posts themselves, and who holds the organisation-wide ones
   catalogs/          control frameworks you imported
@@ -88,6 +89,14 @@ line, restoring over an install that already holds records stops and asks;
 | Stamp is newer than this build | Refused, naming the version that wrote it |
 
 ### The migrations so far
+
+**2 to 3, connector settings become a list.** The first connector release stored
+one console's settings as though there could only ever be one, with no name and
+no way to remove it. Those settings become an entry in `connectors.json`, named
+after the console it reaches, and any stored key moves with it into
+`connector-credentials.json` keyed by that connector. The shapes it replaced are
+deleted, the credentials file included: a secret left on disk for something
+nothing reads outlives the reason anybody had it.
 
 **1 to 2, points of contact become a directory.** Enclaves used to carry a
 system owner and a security contact as free text. Those names are moved into

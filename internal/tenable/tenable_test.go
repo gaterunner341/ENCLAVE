@@ -136,8 +136,9 @@ func newFakeSC(t *testing.T) *fakeSC {
 
 // config points at the fake, trusting its throwaway certificate the way an
 // operator would trust an appliance certificate they had accepted.
-func (f *fakeSC) config() Config {
-	return Config{
+func (f *fakeSC) config() *Connector {
+	return &Connector{
+		ID: "fake-sc", Name: "Fake Security Center", Kind: KindSecurityCenter,
 		Enabled: true, URL: f.URL, EnclaveID: "CORE",
 		CreateAssets: true, InsecureSkipVerify: true,
 	}
@@ -320,27 +321,35 @@ func TestUntrustedCertificateSaysWhatToDo(t *testing.T) {
 }
 
 func TestConfigurationIsRefusedWhenItCannotWork(t *testing.T) {
-	cases := map[string]Config{
-		"no address": {Enabled: true, EnclaveID: "CORE"},
-		"no enclave": {Enabled: true, URL: "https://sc.example.org"},
-		"plain http": {Enabled: true, URL: "http://sc.example.org", EnclaveID: "CORE"},
-		"missing cert": {Enabled: true, URL: "https://sc.example.org", EnclaveID: "CORE",
-			CACertFile: "/no/such/file.pem"},
+	base := func() *Connector {
+		return &Connector{ID: "sc", Name: "SC", Kind: KindSecurityCenter,
+			URL: "https://sc.example.org", EnclaveID: "CORE"}
 	}
-	for name, cfg := range cases {
-		if err := cfg.Validate(); err == nil {
+	cases := map[string]func(*Connector){
+		"no name":      func(c *Connector) { c.Name = "" },
+		"no id":        func(c *Connector) { c.ID = "" },
+		"no address":   func(c *Connector) { c.URL = "" },
+		"no enclave":   func(c *Connector) { c.EnclaveID = "" },
+		"plain http":   func(c *Connector) { c.URL = "http://sc.example.org" },
+		"missing cert": func(c *Connector) { c.CACertFile = "/no/such/file.pem" },
+	}
+	for name, breakIt := range cases {
+		c := base()
+		breakIt(c)
+		if err := c.Validate(); err == nil {
 			t.Errorf("%s should be refused", name)
 		}
 	}
-	// Disabled is always valid, because it does nothing.
-	if err := (Config{}).Validate(); err != nil {
-		t.Errorf("a disabled connector should need no configuration: %v", err)
+	if err := base().Validate(); err != nil {
+		t.Errorf("a complete connector should be accepted: %v", err)
 	}
-	// And plain http is refused by name, since credentials would cross the
-	// network in the clear.
-	err := Config{Enabled: true, URL: "http://sc.example.org", EnclaveID: "CORE"}.Validate()
-	if !strings.Contains(err.Error(), "https") {
-		t.Errorf("the message should say why: %v", err)
+	// Settings are checked even while switched off, because settings saved now
+	// are settings used later.
+	off := base()
+	off.URL = "http://sc.example.org"
+	err := off.Validate()
+	if err == nil || !strings.Contains(err.Error(), "https") {
+		t.Errorf("plain http should be refused by name, got %v", err)
 	}
 }
 
@@ -350,29 +359,35 @@ func TestClientNeedsCredentials(t *testing.T) {
 	if err == nil {
 		t.Fatal("a client with no credentials should not be built")
 	}
-	if !strings.Contains(err.Error(), EnvAccessKey) {
-		t.Errorf("the message should name the environment variable: %v", err)
+	// The message names the connector and the variable that belongs to it,
+	// which is what somebody with two consoles needs to be told.
+	envA, _, _, _ := EnvNames(f.config().ID)
+	if !strings.Contains(err.Error(), envA) {
+		t.Errorf("the message should name this connector's variable: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Fake Security Center") {
+		t.Errorf("the message should say which connector: %v", err)
 	}
 }
 
 func TestCredentialsPreferTheEnvironmentOverTheFile(t *testing.T) {
 	dir := t.TempDir()
-	if err := SaveCredentials(dir, Credentials{AccessKey: "from-file", SecretKey: "file-secret"}); err != nil {
+	if err := SaveCredentials(dir, "sc-one", Credentials{AccessKey: "from-file", SecretKey: "file-secret"}); err != nil {
 		t.Fatal(err)
 	}
 	// The stored file is owner-only, because it holds a secret.
-	info, err := os.Stat(filepath.Join(dir, CredentialsFile))
+	info, err := os.Stat(filepath.Join(dir, CredentialsStore))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("credentials file mode = %o, want 600", perm)
 	}
-	if !CredentialsOnDisk(dir) {
+	if !CredentialsOnDisk(dir, "sc-one") {
 		t.Error("the page needs to be able to say that secrets are on disk")
 	}
 
-	got, err := LoadCredentials(dir)
+	got, err := LoadCredentials(dir, "sc-one")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +397,7 @@ func TestCredentialsPreferTheEnvironmentOverTheFile(t *testing.T) {
 
 	t.Setenv(EnvAccessKey, "from-env")
 	t.Setenv(EnvSecretKey, "env-secret")
-	got, err = LoadCredentials(dir)
+	got, err = LoadCredentials(dir, "sc-one")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,43 +405,144 @@ func TestCredentialsPreferTheEnvironmentOverTheFile(t *testing.T) {
 		t.Errorf("the environment should win, got %+v", got)
 	}
 
-	if err := ForgetCredentials(dir); err != nil {
+	if err := ForgetCredentials(dir, "sc-one"); err != nil {
 		t.Fatal(err)
 	}
-	if CredentialsOnDisk(dir) {
-		t.Error("forgetting the credentials left the file behind")
+	if CredentialsOnDisk(dir, "sc-one") {
+		t.Error("forgetting the credentials left them behind")
 	}
 	// Forgetting again is not an error.
-	if err := ForgetCredentials(dir); err != nil {
+	if err := ForgetCredentials(dir, "sc-one"); err != nil {
 		t.Errorf("removing what is already gone should be fine: %v", err)
 	}
 }
 
-func TestConfigRoundTripsAndDefaultsToDisabled(t *testing.T) {
+func TestTwoConnectorsKeepSeparateCredentials(t *testing.T) {
 	dir := t.TempDir()
-	cfg, err := LoadConfig(dir)
+	for id, key := range map[string]string{"prod": "prod-key", "lab": "lab-key"} {
+		if err := SaveCredentials(dir, id, Credentials{AccessKey: key, SecretKey: "s"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for id, want := range map[string]string{"prod": "prod-key", "lab": "lab-key"} {
+		got, err := LoadCredentials(dir, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.AccessKey != want {
+			t.Errorf("%s got %q, want %q", id, got.AccessKey, want)
+		}
+	}
+	// Removing one leaves the other alone.
+	if err := ForgetCredentials(dir, "prod"); err != nil {
+		t.Fatal(err)
+	}
+	if CredentialsOnDisk(dir, "prod") {
+		t.Error("prod credentials survived being forgotten")
+	}
+	if !CredentialsOnDisk(dir, "lab") {
+		t.Error("forgetting one connector's credentials removed another's")
+	}
+	// A variable named for the connector beats the plain one, so two consoles
+	// can hold different keys.
+	envA, _, _, _ := EnvNames("lab")
+	t.Setenv(EnvAccessKey, "generic")
+	t.Setenv(envA, "lab-specific")
+	got, _ := LoadCredentials(dir, "lab")
+	if got.AccessKey != "lab-specific" {
+		t.Errorf("the connector's own variable should win, got %q", got.AccessKey)
+	}
+	other, _ := LoadCredentials(dir, "prod")
+	if other.AccessKey != "generic" {
+		t.Errorf("the plain variable should still apply elsewhere, got %q", other.AccessKey)
+	}
+}
+
+func TestConnectorsAreAListThatCanBeAddedToAndRemovedFrom(t *testing.T) {
+	dir := t.TempDir()
+	all, err := LoadConnectors(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Enabled {
-		t.Fatal("a directory with no configuration must make no connections")
+	if len(all) != 0 {
+		t.Fatal("a fresh directory has no connectors")
 	}
-	cfg = Config{Enabled: true, URL: "https://sc.example.org/", EnclaveID: "CORE", TimeoutSeconds: 90}
-	if err := SaveConfig(dir, cfg); err != nil {
-		t.Fatal(err)
+	if on, _ := AnyEnabled(dir); on {
+		t.Fatal("with no connectors nothing should be reaching the network")
 	}
-	back, err := LoadConfig(dir)
+
+	prod := &Connector{ID: "prod", Name: "Production", Kind: KindSecurityCenter,
+		Enabled: true, URL: "https://prod.example.org/", EnclaveID: "CORE", TimeoutSeconds: 90}
+	lab := &Connector{ID: "lab", Name: "Lab", Kind: KindSecurityCenter,
+		URL: "https://lab.example.org", EnclaveID: "LAB"}
+	for _, c := range []*Connector{prod, lab} {
+		if err := SaveConnector(dir, c); err != nil {
+			t.Fatalf("%s: %v", c.ID, err)
+		}
+	}
+
+	all, err = LoadConnectors(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !back.Enabled || back.EnclaveID != "CORE" || back.Timeout() != 90*time.Second {
-		t.Errorf("round trip lost detail: %+v", back)
+	if len(all) != 2 {
+		t.Fatalf("got %d connectors, want 2", len(all))
 	}
-	if back.Base() != "https://sc.example.org/rest" {
-		t.Errorf("base = %q", back.Base())
+	// The one that is on sorts first, because it is the one that matters.
+	if all[0].ID != "prod" {
+		t.Errorf("switched-on connectors should come first, got %s", all[0].ID)
 	}
-	if back.Host() != "sc.example.org" {
-		t.Errorf("host = %q", back.Host())
+	got, err := GetConnector(dir, "prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Timeout() != 90*time.Second || got.Base() != "https://prod.example.org/rest" ||
+		got.Host() != "prod.example.org" {
+		t.Errorf("round trip lost detail: %+v", got)
+	}
+
+	// Only the enabled one counts as reaching the network.
+	on, live := AnyEnabled(dir)
+	if !on || len(live) != 1 || live[0].ID != "prod" {
+		t.Errorf("enabled set = %v", live)
+	}
+
+	// Editing one leaves the other alone and keeps its history.
+	RecordSync(dir, "prod")
+	got, _ = GetConnector(dir, "prod")
+	if got.LastSync == nil {
+		t.Fatal("the sync time was not recorded")
+	}
+	got.Name = "Production console"
+	if err := SaveConnector(dir, got); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = GetConnector(dir, "prod")
+	if got.Name != "Production console" || got.LastSync == nil {
+		t.Errorf("an edit lost history: %+v", got)
+	}
+	if _, err := GetConnector(dir, "lab"); err != nil {
+		t.Errorf("editing one connector disturbed another: %v", err)
+	}
+
+	// Removing one takes its credentials with it and leaves the rest.
+	if err := SaveCredentials(dir, "prod", Credentials{AccessKey: "A", SecretKey: "S"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteConnector(dir, "prod"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GetConnector(dir, "prod"); err == nil {
+		t.Error("the connector was not removed")
+	}
+	if CredentialsOnDisk(dir, "prod") {
+		t.Error("a secret was left on disk for a connector that no longer exists")
+	}
+	if _, err := GetConnector(dir, "lab"); err != nil {
+		t.Errorf("removing one connector removed another: %v", err)
+	}
+	if err := DeleteConnector(dir, "prod"); err == nil {
+		t.Error("removing what is already gone should say so")
 	}
 }
 
