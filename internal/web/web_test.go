@@ -17,7 +17,9 @@ import (
 	"github.com/gaterunner341/enclave/internal/ingest"
 	"github.com/gaterunner341/enclave/internal/mapping"
 	"github.com/gaterunner341/enclave/internal/model"
+	"github.com/gaterunner341/enclave/internal/risk"
 	"github.com/gaterunner341/enclave/internal/store"
+	"time"
 )
 
 type harness struct {
@@ -1050,5 +1052,137 @@ func TestRecordingIsBlockedInReadOnlyMode(t *testing.T) {
 	// Reading the CVE views still works.
 	if code := h.get("/vulnerabilities").Code; code != http.StatusOK {
 		t.Errorf("read-only mode broke the vulnerabilities list: %d", code)
+	}
+}
+
+// acceptRisk records a risk acceptance against the first finding and returns it.
+func acceptRisk(t *testing.T, h *harness) *model.Finding {
+	t.Helper()
+	var target *model.Finding
+	for _, f := range h.Store.Findings("CORE") {
+		if f.NeedsWork() && f.Severity.Rank() >= model.SeverityHigh.Rank() {
+			target = f
+			break
+		}
+	}
+	if target == nil {
+		t.Fatal("the fixture has no high finding to accept")
+	}
+	rec := h.post("/findings/"+target.ID+"/disposition", url.Values{
+		"disposition": {"risk_accepted"}, "by": {"Phill"},
+		"note": {"Non-domain machine, compensating control in place."},
+	})
+	if strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("could not accept the risk: %s", rec.Header().Get("Location"))
+	}
+	got, _ := h.Store.Finding(target.ID)
+	return got
+}
+
+func TestAnAcceptedRiskDoesNotReadAsOpen(t *testing.T) {
+	h := newHarness(t)
+	f := acceptRisk(t, h)
+
+	page := h.get("/findings/" + f.ID).Body.String()
+	if strings.Contains(page, "could not be rendered") {
+		t.Fatal(truncateBody(page))
+	}
+	// The header must not carry "Open" and "Risk accepted" side by side, which
+	// is what made the page read as self-contradictory.
+	header := page
+	if i := strings.Index(page, `<div class="split">`); i > 0 {
+		header = page[:i]
+	}
+	if strings.Contains(header, ">Open<") {
+		t.Error("the finding header still shows Open next to Risk accepted")
+	}
+	if !strings.Contains(header, "Risk accepted") {
+		t.Error("the finding header should show the decision")
+	}
+	// The scanner's own result is still available, just not passed off as the
+	// finding's state.
+	if !strings.Contains(page, "Scanner result") {
+		t.Error("the scanner's own result should still be recorded somewhere on the page")
+	}
+	if !strings.Contains(page, "still counts against the controls") {
+		t.Error("the page should explain what accepting the risk did and did not change")
+	}
+}
+
+func TestAcceptedRiskLeavesTheFixThisNextList(t *testing.T) {
+	h := newHarness(t)
+	before := h.get("/").Body.String()
+	f := acceptRisk(t, h)
+	after := h.get("/").Body.String()
+
+	if !strings.Contains(before, f.Title) {
+		t.Fatal("the fixture finding was not on the dashboard to begin with")
+	}
+	if strings.Contains(after, f.Title) {
+		t.Error("an accepted risk is still listed under highest severity open findings")
+	}
+	if !strings.Contains(after, "accepted") {
+		t.Error("the dashboard should say the accepted count rather than hiding it entirely")
+	}
+}
+
+func TestAcceptedRiskIsReachableAndCountedSeparately(t *testing.T) {
+	h := newHarness(t)
+	f := acceptRisk(t, h)
+
+	// Not in the default findings view, which is work outstanding.
+	if strings.Contains(h.get("/enclaves/CORE/findings").Body.String(), f.Title) {
+		t.Error("an accepted risk should not sit in the list somebody works from")
+	}
+	// But one click away, and in the combined view.
+	for _, q := range []string{"?show=accepted", "?show=live", "?show=all"} {
+		if !strings.Contains(h.get("/enclaves/CORE/findings"+q).Body.String(), f.Title) {
+			t.Errorf("the accepted risk is missing from findings%s", q)
+		}
+	}
+	// Counted, not hidden.
+	c := h.Store.Counts()
+	if c.AcceptedFindings != 1 {
+		t.Errorf("accepted count = %d, want 1", c.AcceptedFindings)
+	}
+	if !strings.Contains(h.get("/enclaves/CORE").Body.String(), "1 accepted") {
+		t.Error("the enclave page does not show the accepted count")
+	}
+}
+
+func TestAcceptedRiskStillCountsAgainstControls(t *testing.T) {
+	h := newHarness(t)
+	// Claim the control the STIG rule speaks to, then accept the finding.
+	if rec := h.post("/enclaves/CORE/baseline/nist-800-53r5/AC-6(10)", url.Values{
+		"status": {"implemented"}, "assessed_by": {"P. Kittelson"},
+	}); rec.Code != http.StatusSeeOther {
+		t.Fatal(rec.Code)
+	}
+	acceptRisk(t, h)
+	body := h.get("/enclaves/CORE/baseline/nist-800-53r5/AC-6(10)").Body.String()
+	if !strings.Contains(body, "Contradicted by scans") {
+		t.Error("accepting the risk made the control look satisfied; a decision to live with something is not a fix")
+	}
+}
+
+func TestAcceptedRiskIsNotOverdue(t *testing.T) {
+	h := newHarness(t)
+	f := acceptRisk(t, h)
+	// Age it well past any target.
+	stored, _ := h.Store.Finding(f.ID)
+	stored.FirstSeen = time.Now().AddDate(-3, 0, 0)
+	if !risk.PastTarget(stored, time.Now()) {
+		// Confirm the fixture would be overdue if it were not accepted.
+		probe := *stored
+		probe.Disposition = model.DispositionOpen
+		if !risk.PastTarget(&probe, time.Now()) {
+			t.Fatal("the aged finding should be past target when not accepted")
+		}
+	}
+	if risk.PastTarget(stored, time.Now()) {
+		t.Error("an accepted risk should never be reported as past its remediation target")
+	}
+	if strings.Contains(h.get("/enclaves/CORE/findings?overdue=1").Body.String(), f.Title) {
+		t.Error("the accepted risk appears in the overdue view")
 	}
 }

@@ -181,3 +181,63 @@ func indexOf(hay, needle string) int {
 	}
 	return -1
 }
+
+func TestAcceptedRiskIsLiveButNotOutstandingWork(t *testing.T) {
+	f := &Finding{Status: StatusOpen, Disposition: DispositionRiskAccepted}
+	if !f.Live() {
+		t.Error("an accepted risk is still an exposure, so it stays live and keeps counting against controls")
+	}
+	if !f.Accepted() {
+		t.Error("Accepted should report the decision")
+	}
+	if f.NeedsWork() {
+		t.Error("an accepted risk is not somebody's outstanding task; that is the point of accepting it")
+	}
+	if f.State() != "Risk accepted" {
+		t.Errorf("State = %q; the recorded decision is what the page should say, not the scanner's word", f.State())
+	}
+	if !f.Decided() {
+		t.Error("Decided should be true once a disposition is recorded")
+	}
+}
+
+func TestStateResolvesScannerResultAndDecision(t *testing.T) {
+	cases := []struct {
+		status FindingStatus
+		disp   Disposition
+		want   string
+	}{
+		// Nothing decided: the scanner's word stands.
+		{StatusOpen, DispositionOpen, "Open"},
+		{StatusNotAFinding, DispositionOpen, "Not a finding"},
+		{StatusNotApplicable, DispositionOpen, "Not applicable"},
+		// A decision has been recorded: it is what the page should say.
+		{StatusOpen, DispositionRiskAccepted, "Risk accepted"},
+		{StatusOpen, DispositionMitigated, "Mitigated"},
+		{StatusOpen, DispositionInProgress, "In progress"},
+		// A scanner that has stopped reporting it wins over a stale decision.
+		{StatusNotAFinding, DispositionInProgress, "Not a finding"},
+	}
+	for _, tc := range cases {
+		f := &Finding{Status: tc.status, Disposition: tc.disp}
+		if got := f.State(); got != tc.want {
+			t.Errorf("status %q + disposition %q = %q, want %q", tc.status, tc.disp, got, tc.want)
+		}
+	}
+}
+
+func TestNeedsWorkAcrossDispositions(t *testing.T) {
+	for disp, want := range map[Disposition]bool{
+		DispositionOpen:          true,
+		DispositionInProgress:    true,
+		DispositionMitigated:     true,
+		DispositionRiskAccepted:  false,
+		DispositionRemediated:    false,
+		DispositionFalsePositive: false,
+	} {
+		f := &Finding{Status: StatusOpen, Disposition: disp}
+		if got := f.NeedsWork(); got != want {
+			t.Errorf("NeedsWork with disposition %q = %v, want %v", disp, got, want)
+		}
+	}
+}

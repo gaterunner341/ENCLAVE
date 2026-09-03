@@ -56,7 +56,7 @@
         <td style="font-size: .82rem">{{truncate 44 $a.Platform}}</td>
         <td class="mono" style="font-size: .78rem">{{join " " $a.IPs}}</td>
         <td>{{$a.Criticality.Label}}</td>
-        <td class="num">{{.Open}}</td>
+        <td class="num">{{.Open}}{{if .Accepted}} <span class="badge disp-risk_accepted" title="{{.Accepted}} accepted risks">+{{.Accepted}}</span>{{end}}</td>
         <td>{{if .Open}}<span class="badge {{severityClass .Worst}}">{{.Worst.Label}}</span>{{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
         <td style="white-space: nowrap">{{if .LastSeen}}{{dateP .LastSeen}}{{if .Stale}}<div><span class="badge sev-medium">stale</span></div>{{end}}{{else}}<span class="badge plain">never scanned</span>{{end}}</td>
         <td class="num">{{num .Score}}</td>

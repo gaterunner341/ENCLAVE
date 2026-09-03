@@ -81,6 +81,7 @@ type AssetRisk struct {
 	Asset    *model.Asset
 	Score    float64
 	Open     int
+	Accepted int
 	BySev    map[model.Severity]int
 	Overdue  int
 	Oldest   int // days
@@ -93,11 +94,14 @@ type EnclaveRisk struct {
 	Score   float64
 	// Index is Score normalised to 0-100 against the enclave's asset count, so
 	// that a small enclave and a large one can be compared.
-	Index       float64
-	Band        string
-	Assets      int
-	Assessed    int
+	Index    float64
+	Band     string
+	Assets   int
+	Assessed int
+	// Open is work outstanding. Accepted is live but deliberately accepted, and
+	// is counted apart from it rather than inside it.
 	Open        int
+	Accepted    int
 	BySev       map[model.Severity]int
 	Overdue     int
 	Unmapped    int
@@ -145,7 +149,11 @@ func ScoreEnclave(e *model.Enclave, assets []*model.Asset, findings []*model.Fin
 				continue
 			}
 			ar.Score += FindingScore(f, a, now)
-			ar.Open++
+			if f.Accepted() {
+				ar.Accepted++
+			} else {
+				ar.Open++
+			}
 			ar.BySev[f.Severity.Normalise()]++
 			if PastTarget(f, now) {
 				ar.Overdue++
@@ -158,11 +166,12 @@ func ScoreEnclave(e *model.Enclave, assets []*model.Asset, findings []*model.Fin
 		if a.Stale(now, StaleAfter) {
 			out.StaleAssets++
 		}
-		if ar.Open > 0 {
+		if ar.Open+ar.Accepted > 0 {
 			out.Assessed++
 		}
 		out.Score += ar.Score
 		out.Open += ar.Open
+		out.Accepted += ar.Accepted
 		out.Overdue += ar.Overdue
 		for sev, n := range ar.BySev {
 			out.BySev[sev] += n
@@ -189,11 +198,13 @@ func ScoreEnclave(e *model.Enclave, assets []*model.Asset, findings []*model.Fin
 	return out
 }
 
-// PastTarget reports whether a finding is still live and has passed either its
-// own due date or the default remediation target for its severity. A closed
-// finding is never past target, however old it is.
+// PastTarget reports whether a finding is somebody's outstanding work and has
+// passed either its own due date or the default remediation target for its
+// severity. A closed finding is never past target, however old it is, and
+// neither is an accepted risk: accepting it is the decision about when it gets
+// fixed, so there is no deadline left to miss.
 func PastTarget(f *model.Finding, now time.Time) bool {
-	if !f.Live() {
+	if !f.NeedsWork() {
 		return false
 	}
 	if f.DueDate != nil {

@@ -335,12 +335,44 @@ func (f *Finding) Age(now time.Time) time.Duration { return now.Sub(f.FirstSeen)
 func (f *Finding) AgeDays(now time.Time) int { return int(f.Age(now).Hours() / 24) }
 
 // Live reports whether the finding still represents an unresolved condition.
+//
+// A risk that has been accepted is still live. Accepting a risk is a decision,
+// not a fix: the weakness is still there, it still counts against the control
+// it weakens, and it still carries weight in the risk score. What it is not is
+// work outstanding, which is a different question and NeedsWork answers it.
 func (f *Finding) Live() bool {
 	if !f.Status.Counts() {
 		return false
 	}
 	return f.Disposition.Residual() > 0
 }
+
+// Accepted reports whether somebody has deliberately decided to live with this.
+func (f *Finding) Accepted() bool { return f.Disposition == DispositionRiskAccepted }
+
+// NeedsWork reports whether the finding is somebody's outstanding task. This is
+// what "open" means on a page that is asking what to fix next: a live finding
+// that nobody has decided to accept.
+func (f *Finding) NeedsWork() bool { return f.Live() && !f.Accepted() }
+
+// State is the single word that describes where a finding stands, for a page
+// that has room for one. It resolves the scanner's result and the recorded
+// decision into one answer rather than showing both and leaving the reader to
+// work out which of "Open" and "Risk accepted" wins.
+func (f *Finding) State() string {
+	switch {
+	case !f.Status.Counts():
+		return f.Status.Label()
+	case f.Disposition == DispositionOpen:
+		return "Open"
+	default:
+		return f.Disposition.Label()
+	}
+}
+
+// Decided reports whether anybody has recorded a decision about this, which is
+// what tells a page whether the scanner's result still speaks for itself.
+func (f *Finding) Decided() bool { return f.Disposition != DispositionOpen }
 
 // Controls returns the control identifiers this finding is evidence about
 // within one catalogue.

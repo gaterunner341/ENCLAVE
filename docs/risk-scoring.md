@@ -22,6 +22,28 @@ still costs: open ×1, in progress ×0.75, mitigated ×0.3, risk accepted ×0.15
 remediated and false positive ×0. An accepted risk is deliberately not zero. It
 is a decision, not a fix, and it should keep showing up.
 
+### Accepted risks, and what "open" means
+
+Two different questions get asked of a finding, and confusing them is easy:
+
+- **Is this still an exposure?** An accepted risk is. The weakness is still
+  there, it still carries weight in the score, and it still counts against the
+  control it weakens. A control cannot be reported as satisfied because somebody
+  decided to live with the thing breaking it, so an accepted risk on a control
+  claimed as implemented still reads as **contradicted by scans**.
+- **Is this somebody's outstanding work?** An accepted risk is not. That is what
+  accepting it means.
+
+So an accepted risk stays out of the lists that ask what to fix next: the
+highest-severity list on the overview, the default findings view, and anything
+counted as past its remediation target. Accepting a risk is the decision about
+when it gets fixed, so there is no deadline left to miss.
+
+It is never hidden. Accepted counts appear beside open ones on the overview,
+each enclave and each host, and the findings view has its own choice for them.
+The finding's own page shows the scanner's result, the recorded decision, and
+which of the two the rest of the tool is counting.
+
 **Age factor.** 1 until the finding passes the remediation target for its
 severity, then it grows, stopping at double weight. An ageing backlog should be
 visible without letting it dominate the number.

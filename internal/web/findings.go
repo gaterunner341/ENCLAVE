@@ -31,7 +31,7 @@ func (s *Server) handleFindingList(w http.ResponseWriter, r *http.Request) {
 		Unmapped:    q.Get("unmapped") == "1",
 	}
 	if filters.Show == "" {
-		filters.Show = "live"
+		filters.Show = "open"
 	}
 	now := time.Now()
 	all := s.Store.Findings(e.ID)
@@ -39,9 +39,13 @@ func (s *Server) handleFindingList(w http.ResponseWriter, r *http.Request) {
 	rows := filterFindings(all, filters, assets, now)
 
 	counts := map[model.Severity]int{}
+	accepted := 0
 	for _, f := range rows {
 		if f.Live() {
 			counts[f.Severity.Normalise()]++
+		}
+		if f.Accepted() {
+			accepted++
 		}
 	}
 	// The result set can be very large; the page shows a window and says so.
@@ -58,7 +62,7 @@ func (s *Server) handleFindingList(w http.ResponseWriter, r *http.Request) {
 			"Truncated": len(rows) > len(shown), "Window": window,
 			"Filters": filters, "AssetIndex": assets,
 			"Assets": s.Store.Assets(e.ID), "Scans": s.Store.Scans(e.ID),
-			"Counts": counts,
+			"Counts": counts, "Accepted": accepted,
 		},
 	})
 }
@@ -75,7 +79,7 @@ type findingFilters struct {
 func (f findingFilters) Active() bool {
 	return f.Text != "" || f.Severity != "" || f.Status != "" || f.Disposition != "" ||
 		f.AssetID != "" || f.ScanID != "" || f.Control != "" || f.Overdue || f.Unmapped ||
-		(f.Show != "" && f.Show != "live")
+		(f.Show != "" && f.Show != "open")
 }
 
 func filterFindings(in []*model.Finding, f findingFilters, assets map[string]*model.Asset, now time.Time) []*model.Finding {
@@ -86,9 +90,21 @@ func filterFindings(in []*model.Finding, f findingFilters, assets map[string]*mo
 			if fd.Live() {
 				continue
 			}
+		case "accepted":
+			if !fd.Accepted() {
+				continue
+			}
+		case "live":
+			// Everything still an exposure, accepted risks included.
+			if !fd.Live() {
+				continue
+			}
 		case "all":
 		default:
-			if !fd.Live() {
+			// The default is work outstanding. An accepted risk is not that,
+			// so it is reached through its own choice rather than sitting in
+			// the list somebody is working from.
+			if !fd.NeedsWork() {
 				continue
 			}
 		}

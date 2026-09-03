@@ -38,7 +38,8 @@
             <td class="wrap"><a href="/findings/{{.ID}}">{{truncate 96 .Title}}</a>
               {{if .CVEs}}<div class="mono" style="color: var(--text-3); font-size: .74rem">{{truncate 60 (join " " .CVEs)}}</div>{{end}}</td>
             <td class="mono" style="font-size: .76rem">{{.GroupID}}</td>
-            <td>{{if .Live}}<span class="badge plain">{{.Disposition.Label}}</span>{{else}}<span class="badge disp-remediated">{{.Status.Label}}</span>{{end}}</td>
+            <td>{{if .Decided}}<span class="badge {{dispositionClass .Disposition}}">{{.Disposition.Label}}</span>
+                {{else}}<span class="badge plain">{{.Status.Label}}</span>{{end}}</td>
             <td class="num">{{days .FirstSeen}}d</td>
           </tr>
           {{end}}
@@ -75,8 +76,9 @@
       <header><h3>Open findings by severity</h3></header>
       <div class="card-body">{{template "donut" dict "D" $d.Severity "T" "Open findings"}}
         <div style="margin-top: .75rem; color: var(--text-2); font-size: .82rem">
+          {{$d.Outstanding}} outstanding{{if $d.Accepted}}, {{$d.Accepted}} accepted{{end}}.
           Weighted risk score {{num $d.Score}}, including this asset's criticality of
-          {{lower $a.Criticality.Label}}.</div>
+          {{lower $a.Criticality.Label}} and any accepted risks at reduced weight.</div>
       </div>
     </div>
 

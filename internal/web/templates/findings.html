@@ -3,8 +3,9 @@
 <div class="page-head">
   <div class="grow">
     <h1>Findings</h1>
-    <p class="lede">Every scan result in {{$e.Name}}, whatever tool produced it. A finding stays
-      here until a scan stops reporting it or somebody records a decision about it.</p>
+    <p class="lede">Every scan result in {{$e.Name}}, whatever tool produced it. The default view
+      is work outstanding: a risk somebody has accepted is still tracked and still counts against
+      its controls, but it is not on this list until you ask for it.</p>
   </div>
   <div><a class="btn" href="/export/findings?enclave={{$e.ID}}">Export</a>
     {{if not .ReadOnly}}<a class="btn" href="/enclaves/{{$e.ID}}/findings/new">Record a finding</a>
@@ -17,9 +18,11 @@
       <input type="search" id="q" name="q" value="{{$f.Text}}" placeholder="title, rule, CVE, CCI, control, asset"></div>
     <div class="field"><label for="show">Show</label>
       <select id="show" name="show">
-        <option value="live" {{if eq $f.Show "live"}}selected{{end}}>Live only</option>
+        <option value="open" {{if eq $f.Show "open"}}selected{{end}}>Outstanding</option>
+        <option value="accepted" {{if eq $f.Show "accepted"}}selected{{end}}>Accepted risks</option>
+        <option value="live" {{if eq $f.Show "live"}}selected{{end}}>Both</option>
+        <option value="closed" {{if eq $f.Show "closed"}}selected{{end}}>Closed</option>
         <option value="all" {{if eq $f.Show "all"}}selected{{end}}>Everything</option>
-        <option value="closed" {{if eq $f.Show "closed"}}selected{{end}}>Closed only</option>
       </select></div>
     <div class="field"><label for="severity">Severity</label>
       <select id="severity" name="severity"><option value="">Any</option>
@@ -50,6 +53,7 @@
   {{if $d.Rows}}
   <div class="card-body tight" style="border-bottom: 1px solid var(--border)">
     {{template "sevpills" dict "Counts" $d.Counts}}
+    {{if $d.Accepted}}<span class="badge disp-risk_accepted">{{$d.Accepted}} accepted</span>{{end}}
   </div>
   <div class="table-wrap">
     <table data-sortable>
@@ -69,7 +73,8 @@
         <td class="mono" style="font-size: .76rem">{{if .GroupID}}{{.GroupID}}{{else}}{{.RuleID}}{{end}}</td>
         <td style="font-size: .76rem">
           {{range $cid, $refs := .ControlRefs}}<div class="mono">{{join " " $refs}}</div>{{else}}<span style="color: var(--text-3)">unmapped</span>{{end}}</td>
-        <td>{{if .Live}}<span class="badge {{dispositionClass .Disposition}}">{{.Disposition.Label}}</span>{{else}}<span class="badge disp-remediated">{{.Status.Label}}</span>{{end}}</td>
+        <td>{{if .Decided}}<span class="badge {{dispositionClass .Disposition}}">{{.Disposition.Label}}</span>
+            {{else}}<span class="badge plain">{{.Status.Label}}</span>{{end}}</td>
         <td class="num">{{days .FirstSeen}}d</td>
       </tr>
       {{end}}

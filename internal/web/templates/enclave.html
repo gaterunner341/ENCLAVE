@@ -19,7 +19,7 @@
   <div class="stat"><div class="label">Assets</div><div class="value">{{comma $r.Assets}}</div>
     <div class="note">{{if $r.StaleAssets}}{{$r.StaleAssets}} not seen in 45 days{{else}}all seen recently{{end}}</div></div>
   <div class="stat"><div class="label">Open findings</div><div class="value">{{comma $r.Open}}</div>
-    <div class="note">{{if $r.Overdue}}{{$r.Overdue}} past target{{else}}none past target{{end}}</div></div>
+    <div class="note">{{if $r.Overdue}}{{$r.Overdue}} past target{{else}}none past target{{end}}{{if $r.Accepted}} · {{$r.Accepted}} accepted{{end}}</div></div>
   <div class="stat"><div class="label">Open risk entries</div><div class="value">{{comma $d.OpenRisks}}</div>
     <div class="note"><a href="/enclaves/{{$e.ID}}/risk">Risk register</a></div></div>
 </div>

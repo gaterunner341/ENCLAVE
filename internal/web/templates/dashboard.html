@@ -19,7 +19,7 @@
   <div class="stat"><div class="label">Assets tracked</div><div class="value">{{comma $d.Counts.Assets}}</div>
     <div class="note">hosts and network devices</div></div>
   <div class="stat"><div class="label">Open findings</div><div class="value">{{comma $d.Counts.OpenFindings}}</div>
-    <div class="note">of {{comma $d.Counts.Findings}} recorded</div></div>
+    <div class="note">{{if $d.Counts.AcceptedFindings}}plus {{comma $d.Counts.AcceptedFindings}} accepted{{else}}of {{comma $d.Counts.Findings}} recorded{{end}}</div></div>
   <div class="stat"><div class="label">Open risk entries</div><div class="value">{{comma $d.Counts.OpenRisks}}</div>
     <div class="note">{{comma $d.Counts.Scans}} imports on file</div></div>
 </div>
@@ -44,6 +44,7 @@
           <th data-sort="text">Categorisation</th>
           <th class="num" data-sort="number">Assets</th>
           <th class="num" data-sort="number">Open</th>
+          <th class="num" data-sort="number">Accepted</th>
           <th style="width: 150px">Severity mix</th>
           <th class="num" data-sort="number">Overdue</th>
           <th data-sort="text">Baseline</th>
@@ -58,7 +59,8 @@
           <td><span class="badge plain">{{$e.Categorization.Label}}</span></td>
           <td class="num">{{comma .Risk.Assets}}</td>
           <td class="num">{{comma .Risk.Open}}</td>
-          <td>{{template "sevbar" dict "Counts" .Risk.BySev "Total" .Risk.Open}}</td>
+          <td class="num">{{if .Risk.Accepted}}<span class="badge disp-risk_accepted">{{.Risk.Accepted}}</span>{{else}}—{{end}}</td>
+          <td>{{template "sevbar" dict "Counts" .Risk.BySev "Total" (add .Risk.Open .Risk.Accepted)}}</td>
           <td class="num">{{if .Risk.Overdue}}<span class="badge sev-high">{{.Risk.Overdue}}</span>{{else}}0{{end}}</td>
           <td style="font-size: .8rem">{{if .Baseline}}{{.Baseline}}{{else}}<span style="color: var(--text-3)">none assigned</span>{{end}}</td>
           <td class="num">{{if .Baseline}}{{pct .Coverage}}<div style="color: var(--text-3); font-size: .74rem">{{pct .Verified}} verified</div>{{else}}—{{end}}</td>
@@ -96,7 +98,8 @@
 
 <div class="grid two">
   <div class="card">
-    <header><h3>Highest severity open findings</h3></header>
+    <header><h3>Highest severity open findings</h3><span class="spacer"></span>
+      <span style="color: var(--text-3); font-size: .78rem">accepted risks excluded</span></header>
     {{if $d.Worst}}
     <div class="table-wrap"><table>
       <thead><tr><th>Severity</th><th>Finding</th><th>Asset</th><th class="num">Age</th></tr></thead>
@@ -111,7 +114,8 @@
       {{end}}
       </tbody>
     </table></div>
-    {{else}}<div class="empty"><p>No high or critical findings are open.</p></div>{{end}}
+    {{else}}<div class="empty"><p>Nothing high or critical is outstanding. Anything accepted is
+      on the enclave pages and in the risk register.</p></div>{{end}}
   </div>
 
   <div class="card">

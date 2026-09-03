@@ -27,8 +27,10 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type row struct {
-		Asset    *model.Asset
+		Asset *model.Asset
+		// Open is work outstanding; Accepted is live but deliberately accepted.
 		Open     int
+		Accepted int
 		Worst    model.Severity
 		Score    float64
 		Stale    bool
@@ -52,7 +54,11 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 			if !f.Live() {
 				continue
 			}
-			rw.Open++
+			if f.Accepted() {
+				rw.Accepted++
+			} else {
+				rw.Open++
+			}
 			rw.Score += risk.FindingScore(f, a, now)
 			if f.Severity.Rank() > rw.Worst.Rank() {
 				rw.Worst = f.Severity.Normalise()
@@ -104,10 +110,17 @@ func (s *Server) handleAssetDetail(w http.ResponseWriter, r *http.Request) {
 
 	counts := map[model.Severity]int{}
 	score := 0.0
+	outstanding, accepted := 0, 0
 	for _, f := range findings {
-		if f.Live() {
-			counts[f.Severity.Normalise()]++
-			score += risk.FindingScore(f, a, now)
+		if !f.Live() {
+			continue
+		}
+		counts[f.Severity.Normalise()]++
+		score += risk.FindingScore(f, a, now)
+		if f.Accepted() {
+			accepted++
+		} else {
+			outstanding++
 		}
 	}
 
@@ -152,6 +165,7 @@ func (s *Server) handleAssetDetail(w http.ResponseWriter, r *http.Request) {
 		Title: a.DisplayName(), Nav: "enclaves", SubNav: "assets", Enclave: e,
 		Data: map[string]any{
 			"Asset": a, "Findings": findings, "Score": score,
+			"Outstanding": outstanding, "Accepted": accepted,
 			"Severity": donut(countsBySeverity(counts), severityOrder, severityClasses),
 			"Counts":   counts, "Controls": hits, "Scans": firstN(scans, 10),
 			"Stale": a.Stale(now, risk.StaleAfter),

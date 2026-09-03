@@ -6,11 +6,23 @@
     <h1>{{$f.Title}}</h1>
     <div class="pill-row" style="margin-top: .4rem">
       <span class="badge {{severityClass $f.Severity}}">{{$f.Severity.Label}}</span>
-      <span class="badge plain">{{$f.Status.Label}}</span>
-      <span class="badge {{dispositionClass $f.Disposition}}">{{$f.Disposition.Label}}</span>
+      {{if $f.Decided}}
+        <span class="badge {{dispositionClass $f.Disposition}}">{{$f.Disposition.Label}}</span>
+      {{else}}
+        <span class="badge plain">{{$f.Status.Label}}</span>
+      {{end}}
       {{if $d.Overdue}}<span class="badge sev-high">Past remediation target</span>{{end}}
       {{if $f.RuleID}}<span class="badge plain mono">{{$f.RuleID}}</span>{{end}}
     </div>
+    {{if $f.Decided}}
+    <p style="margin: .5rem 0 0; color: var(--text-2); font-size: .85rem">
+      {{if $f.Accepted}}The scan still reports this, and it still counts against the controls it
+        weakens. It is not counted as work outstanding, because the risk was accepted{{if $f.DispositionBy}}
+        by {{$f.DispositionBy}}{{end}}{{if $f.DispositionAt}} on {{dateP $f.DispositionAt}}{{end}}.
+      {{else}}The scanner's own result was <strong>{{$f.Status.Label}}</strong>. The decision
+        recorded here is what the rest of ENCLAVE counts.{{end}}
+    </p>
+    {{end}}
   </div>
   {{if not .ReadOnly}}{{if $e}}
   <div><a class="btn" href="/enclaves/{{$e.ID}}/risk/new?finding={{$f.ID}}">Raise a risk entry</a></div>
@@ -45,11 +57,13 @@
       <header><h3>The same rule elsewhere in this enclave</h3><span class="spacer"></span>
         <span class="badge plain">{{$d.SiblingTotal}} other assets</span></header>
       <div class="table-wrap"><table>
-        <thead><tr><th>Asset</th><th>Status</th><th>Decision</th><th class="num">Age</th></tr></thead>
+        <thead><tr><th>Asset</th><th>State</th><th>Counts as</th><th class="num">Age</th></tr></thead>
         <tbody>{{range $d.Siblings}}
         <tr><td>{{template "assetlink" dict "Index" $d.AssetIndex "ID" .AssetID}}</td>
-          <td><a href="/findings/{{.ID}}">{{.Status.Label}}</a></td>
-          <td>{{.Disposition.Label}}</td>
+          <td><a href="/findings/{{.ID}}">{{.State}}</a></td>
+          <td>{{if .Accepted}}<span class="badge disp-risk_accepted">accepted</span>
+              {{else if .NeedsWork}}<span class="badge plain">outstanding</span>
+              {{else}}<span class="badge disp-remediated">closed</span>{{end}}</td>
           <td class="num">{{days .FirstSeen}}d</td></tr>
         {{end}}</tbody>
       </table></div>
@@ -113,10 +127,14 @@
           <div><div class="k">Asset</div><div class="v">{{if $d.Asset}}<a href="/assets/{{$d.Asset.ID}}">{{$d.Asset.DisplayName}}</a>{{else}}—{{end}}</div></div>
           <div><div class="k">Rule</div><div class="v mono">{{if $f.RuleID}}{{$f.RuleID}}{{else}}—{{end}}</div></div>
           <div><div class="k">Group</div><div class="v mono">{{if $f.GroupID}}{{$f.GroupID}}{{else}}—{{end}}</div></div>
+          <div><div class="k">Scanner result</div><div class="v">{{$f.Status.Label}}</div></div>
+          <div><div class="k">Decision</div><div class="v">{{$f.Disposition.Label}}</div></div>
+          <div><div class="k">Counts as</div><div class="v">{{if $f.NeedsWork}}work outstanding{{else if $f.Accepted}}accepted risk{{else}}closed{{end}}</div></div>
           <div><div class="k">Raw severity</div><div class="v">{{if $f.RawSeverity}}{{$f.RawSeverity}}{{else}}—{{end}}</div></div>
           <div><div class="k">First seen</div><div class="v">{{date $f.FirstSeen}} ({{days $f.FirstSeen}} days)</div></div>
           <div><div class="k">Last seen</div><div class="v">{{date $f.LastSeen}}</div></div>
-          <div><div class="k">Target date</div><div class="v">{{dateP $d.Due}}</div></div>
+          <div><div class="k">Target date</div><div class="v">
+            {{if $f.NeedsWork}}{{dateP $d.Due}}{{else if $f.Accepted}}<span style="color: var(--text-3)">none, the risk was accepted</span>{{else}}—{{end}}</div></div>
           {{if $f.CVSS}}<div><div class="k">CVSS</div><div class="v">{{num $f.CVSS}}
             {{if $f.CVSSVector}}<div class="mono" style="font-size: .72rem; color: var(--text-3)">{{$f.CVSSVector}}</div>{{end}}</div></div>{{end}}
           {{if $f.Port}}<div><div class="k">Service</div><div class="v mono">{{$f.Protocol}}/{{$f.Port}} {{$f.Service}}</div></div>{{end}}

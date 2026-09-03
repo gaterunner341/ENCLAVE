@@ -663,6 +663,9 @@ func removeString(in []string, v string) []string {
 // Counts is a summary of the whole store, used on the dashboard.
 type Counts struct {
 	Enclaves, Assets, Findings, OpenFindings, Scans, Risks, OpenRisks int
+	// AcceptedFindings are live but deliberately accepted, so they are counted
+	// apart from the work that is outstanding rather than inside it.
+	AcceptedFindings int
 }
 
 // Counts summarises the store.
@@ -674,7 +677,10 @@ func (s *Store) Counts() Counts {
 		Findings: len(s.findings), Scans: len(s.scans), Risks: len(s.risks),
 	}
 	for _, f := range s.findings {
-		if f.Live() {
+		switch {
+		case f.Accepted():
+			c.AcceptedFindings++
+		case f.Live():
 			c.OpenFindings++
 		}
 	}

@@ -55,7 +55,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, row)
 		for _, f := range findings {
-			if f.Live() && f.Severity.Rank() >= model.SeverityHigh.Rank() {
+			if f.NeedsWork() && f.Severity.Rank() >= model.SeverityHigh.Rank() {
 				worstOpen = append(worstOpen, f)
 			}
 		}

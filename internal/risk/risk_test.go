@@ -312,3 +312,62 @@ func TestMatrixRowsReadTopDown(t *testing.T) {
 		t.Error("shading tiers are wrong")
 	}
 }
+
+func TestAnAcceptedRiskIsNeverPastTarget(t *testing.T) {
+	old := finding(model.SeverityCritical, 3650)
+	if !PastTarget(old, now) {
+		t.Fatal("a critical open for ten years is past target")
+	}
+	old.Disposition = model.DispositionRiskAccepted
+	if PastTarget(old, now) {
+		t.Error("accepting a risk is the decision about when it gets fixed, so there is no deadline left to miss")
+	}
+	// It is still an exposure, though, and still carries weight.
+	if !old.Live() {
+		t.Error("an accepted risk is still live")
+	}
+	if FindingScore(old, &model.Asset{Criticality: model.CritModerate}, now) == 0 {
+		t.Error("an accepted risk should still carry risk, at reduced weight")
+	}
+}
+
+func TestEnclaveCountsAcceptedApartFromOpen(t *testing.T) {
+	assets := []*model.Asset{{ID: "a", Criticality: model.CritModerate}}
+	outstanding := finding(model.SeverityHigh, 1)
+	outstanding.AssetID = "a"
+	accepted := finding(model.SeverityHigh, 1)
+	accepted.AssetID = "a"
+	accepted.Disposition = model.DispositionRiskAccepted
+
+	got := ScoreEnclave(&model.Enclave{}, assets, []*model.Finding{outstanding, accepted}, now)
+	if got.Open != 1 {
+		t.Errorf("Open = %d; an accepted risk must not be counted as work outstanding", got.Open)
+	}
+	if got.Accepted != 1 {
+		t.Errorf("Accepted = %d, want 1", got.Accepted)
+	}
+	// Both still show in the severity mix, because both are still exposures.
+	if got.BySev[model.SeverityHigh] != 2 {
+		t.Errorf("severity mix = %v; both are still live", got.BySev)
+	}
+	if got.Overdue != 0 {
+		t.Errorf("overdue = %d, want 0", got.Overdue)
+	}
+}
+
+func TestAcceptedRiskStillContradictsAClaimedControl(t *testing.T) {
+	// This is the point of keeping an accepted risk live: you cannot claim a
+	// control is met because you decided to live with the thing breaking it.
+	cat, e, assets := gapFixture(t)
+	f := evidence("AC-2", model.StatusOpen)
+	f.Disposition = model.DispositionRiskAccepted
+	assessments := map[string]*model.Assessment{"test|AC-2": {Status: model.ImplImplemented}}
+	an := Analyse(cat, "core", e, assets, []*model.Finding{f}, assessments, now)
+	for _, fam := range an.Families {
+		for _, g := range fam.Controls {
+			if g.Control.ID == "AC-2" && g.State != GapContradicted {
+				t.Errorf("AC-2 = %q; an accepted risk still contradicts a claim that the control is implemented", g.State)
+			}
+		}
+	}
+}
