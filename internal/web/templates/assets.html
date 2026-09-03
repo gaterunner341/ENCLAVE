@@ -2,15 +2,22 @@
 {{$d := .Data}}{{$e := .Enclave}}
 <div class="page-head">
   <div class="grow">
+    {{if $d.Estate}}
+    <h1>All assets</h1>
+    <p class="lede">Every host and network device on file, across every enclave. Tick any number
+      of them and move them somewhere else in one go; their findings go with them.</p>
+    {{else}}
     <h1>Assets</h1>
     <p class="lede">Hosts and network devices in {{$e.Name}}. The type is what stops a switch
       being measured against a control only a workstation could meet.</p>
+    {{end}}
   </div>
   <div>
+    {{if not $d.Estate}}<a class="btn" href="/assets">All enclaves</a>{{end}}
     <a class="btn" href="/assets/unplaced">Unplaced</a>
-    <a class="btn" href="/export/assets?enclave={{$e.ID}}">Export</a>
-    {{if not .ReadOnly}}<a class="btn" href="/enclaves/{{$e.ID}}/assets/new">Add by hand</a>
-    <a class="btn primary" href="/import?enclave={{$e.ID}}">Import results</a>{{end}}
+    <a class="btn" href="/export/assets{{if $e}}?enclave={{$e.ID}}{{end}}">Export</a>
+    {{if not .ReadOnly}}{{if $e}}<a class="btn" href="/enclaves/{{$e.ID}}/assets/new">Add by hand</a>
+    <a class="btn primary" href="/import?enclave={{$e.ID}}">Import results</a>{{end}}{{end}}
   </div>
 </div>
 
@@ -20,6 +27,15 @@
       <label for="q">Search</label>
       <input type="search" id="q" name="q" value="{{$d.Query}}" placeholder="name, address, platform, owner, serial, tag">
     </div>
+    {{if $d.Estate}}
+    <div class="field">
+      <label for="enclave">Enclave</label>
+      <select id="enclave" name="enclave">
+        <option value="">All</option>
+        {{range $d.Enclaves}}<option value="{{.ID}}" {{if eq .ID $d.Scope}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </div>
+    {{end}}
     <div class="field">
       <label for="type">Type</label>
       <select id="type" name="type">
@@ -35,14 +51,19 @@
       </select>
     </div>
     <button class="btn" type="submit">Apply</button>
-    <a class="btn" href="/enclaves/{{$e.ID}}/assets">Clear</a>
+    <a class="btn" href="{{if $d.Estate}}/assets{{else}}/enclaves/{{$e.ID}}/assets{{end}}">Clear</a>
   </form>
 
   {{if $d.Rows}}
+  <form method="post" action="/assets/move" data-select-form>
+  <input type="hidden" name="return" value="{{$d.ReturnTo}}">
   <div class="table-wrap">
     <table data-sortable>
       <thead><tr>
-        <th data-sort="text">Asset</th><th data-sort="text">Type</th><th data-sort="text">Platform</th>
+        {{if not .ReadOnly}}<th style="width: 2.2rem">
+          <input type="checkbox" data-select-all aria-label="Select every asset shown"></th>{{end}}
+        <th data-sort="text">Asset</th>{{if $d.Estate}}<th data-sort="text">Enclave</th>{{end}}
+        <th data-sort="text">Type</th><th data-sort="text">Platform</th>
         <th data-sort="text">Addresses</th><th data-sort="text">Criticality</th>
         <th class="num" data-sort="number">Open</th><th data-sort="text">Worst</th>
         <th data-sort="text">Last seen</th><th class="num" data-sort="number">Score</th>
@@ -51,8 +72,11 @@
       <tbody>
       {{range $d.Rows}}{{$a := .Asset}}
       <tr>
+        {{if not $.ReadOnly}}<td><input type="checkbox" name="asset_ids" value="{{$a.ID}}"
+          data-select-item aria-label="Select {{$a.DisplayName}}"></td>{{end}}
         <td><a href="/assets/{{$a.ID}}"><strong>{{$a.DisplayName}}</strong></a>
           {{if $a.Role}}<div style="color: var(--text-3); font-size: .78rem">{{$a.Role}}</div>{{end}}</td>
+        {{if $d.Estate}}<td style="font-size: .82rem">{{with index $d.EnclaveIndex $a.EnclaveID}}<a href="/enclaves/{{.ID}}">{{.Name}}</a>{{else}}<span class="badge sev-high">none</span>{{end}}</td>{{end}}
         <td>{{$a.Type.Label}}</td>
         <td style="font-size: .82rem">{{truncate 44 $a.Platform}}</td>
         <td class="mono" style="font-size: .78rem">{{join " " $a.IPs}}</td>
@@ -61,20 +85,40 @@
         <td>{{if .Open}}<span class="badge {{severityClass .Worst}}">{{.Worst.Label}}</span>{{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
         <td style="white-space: nowrap">{{if .LastSeen}}{{dateP .LastSeen}}{{if .Stale}}<div><span class="badge sev-medium">stale</span></div>{{end}}{{else}}<span class="badge plain">never scanned</span>{{end}}</td>
         <td class="num">{{num .Score}}</td>
-        <td>{{if not $.ReadOnly}}<a class="btn small" href="/import?enclave={{$e.ID}}&amp;asset={{$a.ID}}">Import</a>{{end}}</td>
+        <td>{{if not $.ReadOnly}}<a class="btn small" href="/import?enclave={{$a.EnclaveID}}&amp;asset={{$a.ID}}">Import</a>{{end}}</td>
       </tr>
       {{end}}
       </tbody>
     </table>
   </div>
-  <div class="table-note">{{comma $d.Total}} assets shown.</div>
+  {{if not .ReadOnly}}
+  <div class="filters" data-select-bar hidden style="border-top: 1px solid var(--border); border-bottom: none">
+    <div class="field">
+      <label for="move_to">Move the selected assets into</label>
+      <select id="move_to" name="enclave_id" required>
+        {{range $d.Enclaves}}
+          {{if $d.Estate}}<option value="{{.ID}}">{{.Name}}</option>
+          {{else if ne .ID $e.ID}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+        {{end}}
+      </select>
+    </div>
+    <button class="btn primary" type="submit" data-select-submit>Move</button>
+    <span data-select-count style="color: var(--text-2); font-size: .85rem"></span>
+    <span class="spacer"></span>
+    <span style="color: var(--text-3); font-size: .8rem">Findings move with the assets.</span>
+  </div>
+  {{end}}
+  </form>
+  <div class="table-note">{{comma $d.Total}} assets shown.
+    {{if not .ReadOnly}}Tick any of them to move them to another enclave.{{end}}</div>
   {{else}}
   <div class="empty">
     <h3>No assets match</h3>
     <p>Assets are usually created by importing a scan, which fills in what the scanner knows and
        leaves the rest for you.</p>
-    {{if not .ReadOnly}}<a class="btn" href="/import?enclave={{$e.ID}}">Import results</a>
-    <a class="btn" href="/enclaves/{{$e.ID}}/assets/new">Add one by hand</a>{{end}}
+    {{if not .ReadOnly}}{{if $e}}<a class="btn" href="/import?enclave={{$e.ID}}">Import results</a>
+    <a class="btn" href="/enclaves/{{$e.ID}}/assets/new">Add one by hand</a>
+    {{else}}<a class="btn" href="/import">Import results</a>{{end}}{{end}}
   </div>
   {{end}}
 </div>

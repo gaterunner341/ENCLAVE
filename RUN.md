@@ -168,6 +168,21 @@ There is also a read-only JSON API on the running server, at `/api/enclaves`,
 
 ---
 
+## Moving assets between enclaves
+
+The **Assets** page lists every host and network device on file, whichever
+enclave it is in. Tick any number of them, choose a destination at the bottom,
+and move them in one go. Their findings move with them, so nothing is left
+counting towards the enclave they came from.
+
+The same works from a single enclave's asset list, and the filters apply to the
+selection: narrow to network devices, or to a search term, tick the header
+checkbox to take everything shown, and move the lot. Shift-clicking selects a
+run of rows.
+
+Assets that ended up in no enclave at all are on **Unplaced assets**, linked from
+the Enclaves page and from a warning on the overview when there are any.
+
 ## Appearance
 
 The footer of every page has an appearance control: **Light**, **Dark**, or

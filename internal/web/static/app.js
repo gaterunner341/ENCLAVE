@@ -208,3 +208,79 @@
   selects.forEach(function (s) { s.addEventListener("change", render); });
   render();
 })();
+
+// Selecting rows in a table to act on them together.
+//
+// A form marked data-select-form holds a set of data-select-item checkboxes, an
+// optional data-select-all in the header, and a bar that stays hidden until
+// something is ticked. Moving several hundred assets is a real job, so the bar
+// says how many are selected and the confirmation says it again.
+(function () {
+  "use strict";
+
+  document.querySelectorAll("form[data-select-form]").forEach(function (form) {
+    var items = Array.prototype.slice.call(form.querySelectorAll("[data-select-item]"));
+    if (!items.length) return;
+    var all = form.querySelector("[data-select-all]");
+    var bar = form.querySelector("[data-select-bar]");
+    var count = form.querySelector("[data-select-count]");
+    var submit = form.querySelector("[data-select-submit]");
+
+    function selected() {
+      return items.filter(function (i) { return i.checked && !i.disabled; });
+    }
+
+    function update() {
+      var n = selected().length;
+      if (bar) bar.hidden = n === 0;
+      if (count) {
+        count.textContent = n === 1 ? "1 asset selected" : n + " assets selected";
+      }
+      if (submit) submit.disabled = n === 0;
+      if (all) {
+        all.checked = n > 0 && n === items.length;
+        all.indeterminate = n > 0 && n < items.length;
+      }
+    }
+
+    items.forEach(function (i) { i.addEventListener("change", update); });
+
+    if (all) {
+      all.addEventListener("change", function () {
+        items.forEach(function (i) { i.checked = all.checked; });
+        update();
+      });
+    }
+
+    // Shift-clicking extends the selection from the last box touched, which is
+    // what makes picking a run of rows bearable.
+    var anchor = null;
+    items.forEach(function (item, index) {
+      item.addEventListener("click", function (ev) {
+        if (ev.shiftKey && anchor !== null) {
+          var from = Math.min(anchor, index), to = Math.max(anchor, index);
+          for (var i = from; i <= to; i++) items[i].checked = item.checked;
+          update();
+        }
+        anchor = index;
+      });
+    });
+
+    form.addEventListener("submit", function (ev) {
+      var n = selected().length;
+      if (n === 0) {
+        ev.preventDefault();
+        return;
+      }
+      var target = form.querySelector("select[name=enclave_id]");
+      var where = target && target.options[target.selectedIndex]
+        ? target.options[target.selectedIndex].text : "another enclave";
+      var noun = n === 1 ? "1 asset" : n + " assets";
+      if (!window.confirm("Move " + noun + " into " + where + "? Their findings move too.")) {
+        ev.preventDefault();
+      }
+    });
+
+    update();
+  });
+})();

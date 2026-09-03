@@ -14,6 +14,7 @@
     <nav class="nav">
       <a href="/" {{if eq .Nav "dashboard"}}class="on"{{end}}>Overview</a>
       <a href="/enclaves" {{if eq .Nav "enclaves"}}class="on"{{end}}>Enclaves</a>
+      <a href="/assets" {{if eq .Nav "assets"}}class="on"{{end}}>Assets</a>
       <a href="/vulnerabilities" {{if eq .Nav "vulns"}}class="on"{{end}}>Vulnerabilities</a>
       <a href="/import" {{if eq .Nav "import"}}class="on"{{end}}>Import</a>
       <a href="/catalogs" {{if eq .Nav "catalogs"}}class="on"{{end}}>Baselines</a>

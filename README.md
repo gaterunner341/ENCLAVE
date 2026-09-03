@@ -83,6 +83,11 @@ what somebody claimed with what the scans found:
 **Contradicted** is the state the tool exists to produce. No document review
 finds it, because on paper the control is fine.
 
+**Assets in bulk.** The estate-wide asset list crosses enclaves, so moving a set
+of hosts from one to another is one job rather than one per enclave. Selections
+survive the filters, findings move with the assets, and anything that ended up
+in no enclave at all is found on its own page rather than being lost.
+
 **Vulnerabilities.** Findings are recorded per host, which is right for fixing
 them. The Vulnerabilities page turns that round: one row per CVE, every host it
 is on, the worst severity and CVSS seen, the age of the oldest instance and how

@@ -361,11 +361,27 @@ select[multiple] { min-height: 8rem; }
 .check label { font-weight: 500; margin: 0; }
 
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 1rem; }
+/* The action bar sticks to the bottom of the viewport, so Save is reachable
+   from anywhere in a long form without scrolling to the end of it. */
 .form-actions {
   display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
-  padding-top: .5rem; border-top: 1px solid var(--border); margin-top: 1rem;
+  position: sticky; bottom: 0; z-index: 15;
+  padding: .7rem 1rem; margin-top: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: 0 -2px 10px rgba(16, 24, 40, .10);
 }
 .form-actions .spacer { flex: 1; }
+.form-actions .note { color: var(--text-3); font-size: .8rem; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .form-actions { box-shadow: 0 -2px 10px rgba(0, 0, 0, .45); }
+}
+:root[data-theme="dark"] .form-actions { box-shadow: 0 -2px 10px rgba(0, 0, 0, .45); }
+
+/* A second Save in the page header, for the forms long enough that the bottom
+   of the page is a long way from the top. */
+.page-head form.header-save { display: inline; }
 
 .btn {
   display: inline-block; padding: .4rem .85rem; border-radius: var(--radius);

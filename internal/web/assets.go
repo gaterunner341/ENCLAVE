@@ -10,11 +10,25 @@ import (
 	"github.com/gaterunner341/enclave/internal/risk"
 )
 
+// handleAssetList serves both one enclave's inventory and the whole estate's.
+// The estate-wide view is what makes a bulk move across several enclaves one
+// job rather than one job per enclave.
 func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
-	e, ok := s.Store.Enclave(r.PathValue("id"))
-	if !ok {
-		s.fail(w, r, http.StatusNotFound, "No enclave with that identifier.")
-		return
+	var e *model.Enclave
+	scope := ""
+	if id := r.PathValue("id"); id != "" {
+		found, ok := s.Store.Enclave(id)
+		if !ok {
+			s.fail(w, r, http.StatusNotFound, "No enclave with that identifier.")
+			return
+		}
+		e, scope = found, found.ID
+	} else if id := r.URL.Query().Get("enclave"); id != "" {
+		// The estate-wide list can still be narrowed to one enclave without
+		// leaving it, so a move out of one is set up in a single step.
+		if found, ok := s.Store.Enclave(id); ok {
+			scope = found.ID
+		}
 	}
 	now := time.Now()
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
@@ -22,7 +36,7 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 	wantCrit := r.URL.Query().Get("criticality")
 
 	findings := map[string][]*model.Finding{}
-	for _, f := range s.Store.Findings(e.ID) {
+	for _, f := range s.Store.Findings(scope) {
 		findings[f.AssetID] = append(findings[f.AssetID], f)
 	}
 
@@ -38,7 +52,7 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 	}
 	rows := []row{}
 	byType := map[string]int{}
-	for _, a := range s.Store.Assets(e.ID) {
+	for _, a := range s.assetsFor(scope) {
 		byType[a.Type.Label()]++
 		if wantType != "" && string(a.Type) != wantType {
 			continue
@@ -73,13 +87,24 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 		return strings.ToLower(rows[i].Asset.DisplayName()) < strings.ToLower(rows[j].Asset.DisplayName())
 	})
 
+	title, nav, sub := "Assets", "assets", ""
+	if e != nil {
+		title, nav, sub = "Assets · "+e.Name, "enclaves", "assets"
+	}
 	s.render(w, r, "assets.html", page{
-		Title: "Assets · " + e.Name, Nav: "enclaves", SubNav: "assets", Enclave: e,
+		Title: title, Nav: nav, SubNav: sub, Enclave: e,
 		Data: map[string]any{
 			"Rows": rows, "Query": r.URL.Query().Get("q"),
 			"Type": wantType, "Criticality": wantCrit,
 			"ByType": byType, "TypeOrder": sortedKeys(byType),
 			"Total": len(rows),
+			// Moving assets returns here, filters and all, so a large job can
+			// be worked through a filter at a time.
+			"Enclaves":     s.Store.Enclaves(),
+			"ReturnTo":     safeReturn(r.URL.RequestURI()),
+			"EnclaveIndex": s.enclaveIndex(),
+			"Scope":        scope,
+			"Estate":       e == nil,
 		},
 	})
 }

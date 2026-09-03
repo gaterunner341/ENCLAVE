@@ -32,16 +32,17 @@
       enclave's totals, measured against no baseline, and their findings count towards nothing.
       Move them somewhere to bring them back.</p>
   </div>
-  <form method="post" action="/assets/move">
+  <form method="post" action="/assets/move" data-select-form>
     <input type="hidden" name="return" value="/assets/unplaced">
     <div class="table-wrap">
       <table>
-        <thead><tr><th style="width: 2rem"></th><th>Asset</th><th>Why</th>
+        <thead><tr><th style="width: 2rem"><input type="checkbox" data-select-all
+          aria-label="Select every orphaned asset"></th><th>Asset</th><th>Why</th>
           <th>Addresses</th><th>Suggested enclave</th><th></th></tr></thead>
         <tbody>
         {{range $d.Orphaned}}
         <tr>
-          <td><input type="checkbox" name="asset_ids" value="{{.Asset.ID}}" checked></td>
+          <td><input type="checkbox" name="asset_ids" value="{{.Asset.ID}}" data-select-item checked></td>
           <td><a href="/assets/{{.Asset.ID}}"><strong>{{.Asset.DisplayName}}</strong></a>
             <div style="color: var(--text-3); font-size: .78rem">{{.Asset.Type.Label}}{{if ne .Asset.Platform "Unknown"}} · {{truncate 40 .Asset.Platform}}{{end}}</div></td>
           <td><span class="badge sev-high">{{.Problem.Label}}</span>
@@ -58,12 +59,14 @@
       </table>
     </div>
     {{if not .ReadOnly}}
-    <div class="filters" style="border-top: 1px solid var(--border); border-bottom: none">
+    <div class="filters" data-select-bar style="border-top: 1px solid var(--border); border-bottom: none">
       <div class="field"><label for="enclave_id">Move the ticked assets into</label>
         <select id="enclave_id" name="enclave_id" required>
           {{range $d.Enclaves}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
         </select></div>
-      <button class="btn primary" type="submit">Move them</button>
+      <button class="btn primary" type="submit" data-select-submit>Move them</button>
+      <span data-select-count style="color: var(--text-2); font-size: .85rem"></span>
+      <span class="spacer"></span>
       <span style="color: var(--text-3); font-size: .8rem">Their findings move with them.</span>
     </div>
     {{end}}
@@ -80,16 +83,17 @@
       normally. Their addresses just do not fall in any range that enclave claims. Either the
       asset is filed in the wrong place, or the enclave's ranges are incomplete.</p>
   </div>
-  <form method="post" action="/assets/move">
+  <form method="post" action="/assets/move" data-select-form>
     <input type="hidden" name="return" value="/assets/unplaced">
     <div class="table-wrap">
       <table>
-        <thead><tr><th style="width: 2rem"></th><th>Asset</th><th>Filed under</th>
+        <thead><tr><th style="width: 2rem"><input type="checkbox" data-select-all
+          aria-label="Select every misfiled asset"></th><th>Asset</th><th>Filed under</th>
           <th>Addresses</th><th>Addresses point to</th><th></th></tr></thead>
         <tbody>
         {{range $d.Misfiled}}
         <tr>
-          <td><input type="checkbox" name="asset_ids" value="{{.Asset.ID}}"></td>
+          <td><input type="checkbox" name="asset_ids" value="{{.Asset.ID}}" data-select-item></td>
           <td><a href="/assets/{{.Asset.ID}}"><strong>{{.Asset.DisplayName}}</strong></a></td>
           <td>{{if .Claimed}}<a href="/enclaves/{{.Claimed.ID}}">{{.Claimed.Name}}</a>{{end}}</td>
           <td class="mono" style="font-size: .78rem">{{join " " .Asset.IPs}}</td>
@@ -103,12 +107,14 @@
       </table>
     </div>
     {{if not .ReadOnly}}
-    <div class="filters" style="border-top: 1px solid var(--border); border-bottom: none">
+    <div class="filters" data-select-bar hidden style="border-top: 1px solid var(--border); border-bottom: none">
       <div class="field"><label for="misfiled_enclave">Move the ticked assets into</label>
         <select id="misfiled_enclave" name="enclave_id" required>
           {{range $d.Enclaves}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
         </select></div>
-      <button class="btn" type="submit">Move them</button>
+      <button class="btn" type="submit" data-select-submit>Move them</button>
+      <span data-select-count style="color: var(--text-2); font-size: .85rem"></span>
+      <span class="spacer"></span>
       <span style="color: var(--text-3); font-size: .8rem">Or add the missing range to the enclave instead.</span>
     </div>
     {{end}}

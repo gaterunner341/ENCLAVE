@@ -5,9 +5,12 @@
     <div class="crumbs">{{if $e}}<a href="/enclaves/{{$e.ID}}/assets">Assets</a>{{end}}</div>
     <h1>{{if $d.IsNew}}Add asset{{else}}Edit {{$a.DisplayName}}{{end}}</h1>
   </div>
+  <div>
+    <button class="btn primary" type="submit" form="asset-form">Save</button>
+  </div>
 </div>
 
-<form method="post" action="{{if $d.IsNew}}/enclaves/{{$e.ID}}/assets/new{{else}}/assets/{{$a.ID}}/edit{{end}}">
+<form method="post" action="{{if $d.IsNew}}/enclaves/{{$e.ID}}/assets/new{{else}}/assets/{{$a.ID}}/edit{{end}}" id="asset-form">
 <div class="split">
   <div class="card">
     <header><h2>Identity</h2></header>

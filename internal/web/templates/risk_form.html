@@ -5,9 +5,12 @@
     <div class="crumbs"><a href="/enclaves/{{$e.ID}}/risk">Risk register</a></div>
     <h1>{{if $d.IsNew}}New risk entry{{else}}Edit risk entry{{end}}</h1>
   </div>
+  <div>
+    <button class="btn primary" type="submit" form="risk-form">Save</button>
+  </div>
 </div>
 
-<form method="post" action="{{if $d.IsNew}}/enclaves/{{$e.ID}}/risk/new{{else}}/risk/{{$r.ID}}/edit{{end}}">
+<form method="post" action="{{if $d.IsNew}}/enclaves/{{$e.ID}}/risk/new{{else}}/risk/{{$r.ID}}/edit{{end}}" id="risk-form">
 <div class="split">
   <div>
     <div class="card">

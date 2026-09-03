@@ -5,9 +5,12 @@
     <div class="crumbs"><a href="/enclaves">Enclaves</a>{{if not $d.IsNew}} / <a href="/enclaves/{{$e.ID}}">{{$e.Name}}</a>{{end}}</div>
     <h1>{{if $d.IsNew}}New enclave{{else}}Settings{{end}}</h1>
   </div>
+  <div>
+    <button class="btn primary" type="submit" form="enclave-form">{{if $d.IsNew}}Create{{else}}Save{{end}}</button>
+  </div>
 </div>
 
-<form method="post" action="{{if $d.IsNew}}/enclaves/new{{else}}/enclaves/{{$e.ID}}/edit{{end}}">
+<form method="post" action="{{if $d.IsNew}}/enclaves/new{{else}}/enclaves/{{$e.ID}}/edit{{end}}" id="enclave-form">
 <div class="split">
   <div>
     <div class="card">

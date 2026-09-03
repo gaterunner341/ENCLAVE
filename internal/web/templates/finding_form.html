@@ -9,9 +9,12 @@
       see. Give it a CVE and it counts towards the same controls and the same risk score as an
       imported one.</p>
   </div>
+  <div>
+    <button class="btn primary" type="submit" form="finding-form">Record it</button>
+  </div>
 </div>
 
-<form method="post" action="{{if $a}}/assets/{{$a.ID}}/findings/new{{else}}/enclaves/{{$e.ID}}/findings/new{{end}}">
+<form method="post" action="{{if $a}}/assets/{{$a.ID}}/findings/new{{else}}/enclaves/{{$e.ID}}/findings/new{{end}}" id="finding-form">
 <div class="split">
   <div class="card">
     <header><h2>What was found</h2></header>

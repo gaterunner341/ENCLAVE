@@ -1462,3 +1462,131 @@ func TestThemeReturnCannotLeaveTheSite(t *testing.T) {
 		t.Errorf("a legitimate path was rejected: %q", got)
 	}
 }
+
+func TestEstateWideAssetListAndBulkMove(t *testing.T) {
+	h := newHarness(t)
+	if err := h.Store.PutEnclave(&model.Enclave{ID: "NET", Name: "Network Infrastructure"}); err != nil {
+		t.Fatal(err)
+	}
+	rec := h.get("/assets")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d: %s", rec.Code, truncateBody(rec.Body.String()))
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "could not be rendered") {
+		t.Fatal(truncateBody(body))
+	}
+	if !strings.Contains(body, "All assets") {
+		t.Error("the estate-wide list does not identify itself")
+	}
+	// It names which enclave each asset is in, which the per-enclave list has
+	// no need to.
+	if !strings.Contains(body, "Core Operations") {
+		t.Error("the estate list has no enclave column")
+	}
+	// And it is reachable without knowing the URL.
+	if !strings.Contains(h.get("/").Body.String(), `href="/assets"`) {
+		t.Error("nothing links to the estate-wide asset list")
+	}
+
+	before := h.Store.Assets("CORE")
+	if len(before) < 2 {
+		t.Fatalf("the fixture needs at least two assets, has %d", len(before))
+	}
+	ids := url.Values{"enclave_id": {"NET"}, "return": {"/assets"}}
+	for _, a := range before {
+		ids.Add("asset_ids", a.ID)
+	}
+	rec = h.post("/assets/move", ids)
+	if rec.Code != http.StatusSeeOther || strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("move = %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	if len(h.Store.Assets("CORE")) != 0 {
+		t.Error("the assets did not leave the enclave they were in")
+	}
+	if got := len(h.Store.Assets("NET")); got != len(before) {
+		t.Errorf("moved %d assets, want %d", got, len(before))
+	}
+	// Findings follow, or they go on counting towards the enclave they left.
+	if len(h.Store.Findings("CORE")) != 0 {
+		t.Error("findings were left behind in the old enclave")
+	}
+	if len(h.Store.Findings("NET")) == 0 {
+		t.Error("no findings arrived with the assets")
+	}
+	// The message says what happened rather than just succeeding silently.
+	if !strings.Contains(rec.Header().Get("Location"), "Network+Infrastructure") {
+		t.Errorf("the confirmation does not name the destination: %s", rec.Header().Get("Location"))
+	}
+}
+
+func TestAssetListsCarrySelectionMarkup(t *testing.T) {
+	h := newHarness(t)
+	for _, path := range []string{"/assets", "/enclaves/CORE/assets"} {
+		body := h.get(path).Body.String()
+		for _, want := range []string{
+			"data-select-form", "data-select-all", "data-select-item",
+			"data-select-bar", `name="asset_ids"`, `action="/assets/move"`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s is missing %s, so rows cannot be selected", path, want)
+			}
+		}
+	}
+	// An enclave's own list must not offer to move assets into itself.
+	body := h.get("/enclaves/CORE/assets").Body.String()
+	sel := body[strings.Index(body, `id="move_to"`):]
+	sel = sel[:strings.Index(sel, "</select>")]
+	if strings.Contains(sel, `value="CORE"`) {
+		t.Error("the move target list offers the enclave the assets are already in")
+	}
+	// Read-only mode offers no selection at all.
+	h.ReadOnly = true
+	if strings.Contains(h.get("/assets").Body.String(), `name="asset_ids"`) {
+		t.Error("read-only mode still renders selection checkboxes")
+	}
+}
+
+func TestAssetListScopesToOneEnclaveWithoutLeavingTheEstateView(t *testing.T) {
+	h := newHarness(t)
+	if err := h.Store.PutEnclave(&model.Enclave{ID: "NET", Name: "Network Infrastructure"}); err != nil {
+		t.Fatal(err)
+	}
+	all := h.get("/assets").Body.String()
+	scoped := h.get("/assets?enclave=NET").Body.String()
+	if strings.Count(scoped, `name="asset_ids"`) != 0 {
+		t.Error("scoping to an empty enclave should show no assets")
+	}
+	if strings.Count(all, `name="asset_ids"`) == 0 {
+		t.Error("the unscoped view should show the estate")
+	}
+}
+
+func TestLongFormsOfferSaveWithoutScrolling(t *testing.T) {
+	h := newHarness(t)
+	a := h.Store.AllAssets()[0]
+	for _, path := range []string{
+		"/assets/" + a.ID + "/edit", "/enclaves/CORE/edit",
+		"/enclaves/CORE/risk/new", "/enclaves/CORE/findings/new",
+	} {
+		body := h.get(path).Body.String()
+		if strings.Contains(body, "could not be rendered") {
+			t.Fatalf("%s: %s", path, truncateBody(body))
+		}
+		head := body
+		if i := strings.Index(body, `<form method="post"`); i > 0 {
+			head = body[:i]
+		}
+		// A button above the form submits it through the form attribute, so
+		// Save is reachable without scrolling to the end of a long page.
+		if !strings.Contains(head, `type="submit" form="`) {
+			t.Errorf("%s has no Save button above the form", path)
+		}
+		// And the id it targets exists.
+		id := head[strings.Index(head, `form="`)+len(`form="`):]
+		id = id[:strings.Index(id, `"`)]
+		if !strings.Contains(body, `id="`+id+`"`) {
+			t.Errorf("%s: the header button targets %q, which is not on the page", path, id)
+		}
+	}
+}
