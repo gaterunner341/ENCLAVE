@@ -4,7 +4,7 @@
   <div class="grow">
     <div class="crumbs">{{if $e}}<a href="/enclaves/{{$e.ID}}/assets">Assets</a>{{end}}</div>
     <h1>{{$a.DisplayName}}</h1>
-    <p class="lede">{{$a.Type.Label}}{{if $a.Role}} · {{$a.Role}}{{end}} · {{$a.Platform}}</p>
+    <p class="lede">{{$a.Type.Label}}{{if and $a.Role (ne $a.Role $a.Type.Label)}} · {{$a.Role}}{{end}}{{if ne $a.Platform "Unknown"}} · {{$a.Platform}}{{end}}</p>
   </div>
   <div>
     {{if not .ReadOnly}}<a class="btn primary" href="/import?enclave={{$a.EnclaveID}}&amp;asset={{$a.ID}}">Import results for this host</a>
@@ -37,7 +37,7 @@
             <td><span class="badge {{severityClass .Severity}}">{{.Severity.Label}}</span></td>
             <td class="wrap"><a href="/findings/{{.ID}}">{{truncate 96 .Title}}</a>
               {{if .CVEs}}<div class="mono" style="color: var(--text-3); font-size: .74rem">{{truncate 60 (join " " .CVEs)}}</div>{{end}}</td>
-            <td class="mono" style="font-size: .76rem">{{.GroupID}}</td>
+            <td class="ident">{{.GroupID}}</td>
             <td>{{if .Decided}}<span class="badge {{dispositionClass .Disposition}}">{{.Disposition.Label}}</span>
                 {{else}}<span class="badge plain">{{.Status.Label}}</span>{{end}}</td>
             <td class="num">{{days .FirstSeen}}d</td>

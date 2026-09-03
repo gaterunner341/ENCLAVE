@@ -33,10 +33,6 @@
           <textarea id="description" name="description">{{$e.Description}}</textarea>
         </div>
         <div class="form-grid">
-          <div class="field"><label for="owner">System owner</label>
-            <input type="text" id="owner" name="owner" value="{{$e.Owner}}"></div>
-          <div class="field"><label for="security_contact">Security contact</label>
-            <input type="text" id="security_contact" name="security_contact" value="{{$e.SecurityContact}}"></div>
           <div class="field"><label for="organization">Organisation</label>
             <input type="text" id="organization" name="organization" value="{{$e.Organization}}"></div>
           <div class="field"><label for="location">Location</label>
@@ -55,6 +51,40 @@
             <span class="hint">Comma separated.</span></label>
             <input type="text" id="tags" name="tags" value="{{join ", " $e.Tags}}"></div>
         </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>Points of contact</h2><span class="spacer"></span>
+        <a class="btn small" href="/people">Manage people</a></header>
+      <div class="card-body">
+        {{if $d.People}}
+        <p style="color: var(--text-2); margin-top: 0">Chosen from the directory, so a name is
+          spelled the same on every enclave and a change of post is one edit.</p>
+        <div class="form-grid">
+          {{range $d.Roles}}
+          {{$held := index $e.Contacts .ID}}
+          <div class="field">
+            <label for="contact_{{.ID}}">{{.Name}}
+              {{if eq (printf "%s" .Scope) "organization"}}
+                <span class="hint">Held once for the organisation. Leave blank to inherit
+                  {{with index $d.PersonIndex .Holder}}{{.Name}}{{else}}whoever holds it{{end}}.</span>
+              {{else if .Description}}<span class="hint">{{.Description}}</span>{{end}}
+            </label>
+            <select id="contact_{{.ID}}" name="contact_{{.ID}}">
+              <option value="">{{if eq (printf "%s" .Scope) "organization"}}Inherit from the organisation{{else}}Nobody yet{{end}}</option>
+              {{range $d.People}}<option value="{{.ID}}" {{if eq .ID $held}}selected{{end}}>{{.Display}}</option>{{end}}
+            </select>
+          </div>
+          {{end}}
+        </div>
+        {{else}}
+        <div class="empty" style="padding: 1.5rem 0">
+          <p>Nobody is on file yet, so there is nobody to choose. Add the people who hold posts
+             over your systems and they appear here for every enclave.</p>
+          <a class="btn primary" href="/people/new">Add somebody</a>
+        </div>
+        {{end}}
       </div>
     </div>
 

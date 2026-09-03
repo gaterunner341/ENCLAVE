@@ -55,12 +55,16 @@ type Enclave struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 
-	Owner           string `json:"owner,omitempty"`
-	SecurityContact string `json:"security_contact,omitempty"`
-	Organization    string `json:"organization,omitempty"`
-	Location        string `json:"location,omitempty"`
-	Environment     string `json:"environment,omitempty"`
-	Status          string `json:"status,omitempty"`
+	// Contacts maps a role identifier to the person who holds it over this
+	// enclave. A role left out here falls back to the organisation-wide holder,
+	// so a Chief Information Officer is recorded once rather than on every
+	// system.
+	Contacts map[string]string `json:"contacts,omitempty"`
+
+	Organization string `json:"organization,omitempty"`
+	Location     string `json:"location,omitempty"`
+	Environment  string `json:"environment,omitempty"`
+	Status       string `json:"status,omitempty"`
 
 	Confidentiality Impact `json:"confidentiality"`
 	Integrity       Impact `json:"integrity"`

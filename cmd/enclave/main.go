@@ -496,7 +496,7 @@ func cmdEnclave(args []string) error {
 			for _, n := range e.Networks {
 				ranges = append(ranges, n.CIDR)
 			}
-			_ = w.Write([]string{e.ID, e.Name, e.Owner, e.Environment,
+			_ = w.Write([]string{e.ID, e.Name, ownerName(st, e), e.Environment,
 				e.Categorization().Label(), strings.Join(ranges, " "),
 				fmt.Sprint(len(st.Assets(e.ID)))})
 		}
@@ -511,7 +511,7 @@ func cmdEnclave(args []string) error {
 			slug = model.SlugID(*name)
 		}
 		e := &model.Enclave{
-			ID: slug, Name: *name, Owner: *owner, Environment: *env, Status: "Active",
+			ID: slug, Name: *name, Environment: *env, Status: "Active",
 			Confidentiality: model.Impact(*conf).Normalise(),
 			Integrity:       model.Impact(*integ).Normalise(),
 			Availability:    model.Impact(*avail).Normalise(),
@@ -532,6 +532,17 @@ func cmdEnclave(args []string) error {
 		}
 		if err := st.PutEnclave(e); err != nil {
 			return err
+		}
+		// A name given here goes into the directory and is assigned as System
+		// Owner, so that it is the same record every other enclave would use.
+		if strings.TrimSpace(*owner) != "" {
+			person, err := findOrAddPerson(st, *owner)
+			if err != nil {
+				return err
+			}
+			if err := st.SetContact(e.ID, "system-owner", person.ID); err != nil {
+				return err
+			}
 		}
 		fmt.Fprintf(stdout, "created enclave %s (%s)\n", e.ID, e.Name)
 		return nil
@@ -561,6 +572,35 @@ func parseFlags(fs *flag.FlagSet, args []string) ([]string, error) {
 		positional = append(positional, fs.Arg(0))
 		rest = fs.Args()[1:]
 	}
+}
+
+// ownerName resolves whoever holds the System Owner role over an enclave.
+func ownerName(st *store.Store, e *model.Enclave) string {
+	role, ok := st.Role("system-owner")
+	if !ok {
+		return ""
+	}
+	id, _ := e.Contact(role)
+	if p, ok := st.Person(id); ok {
+		return p.Name
+	}
+	return ""
+}
+
+// findOrAddPerson reuses a directory entry with the same name rather than
+// creating a second record for somebody already on file.
+func findOrAddPerson(st *store.Store, name string) (*model.Person, error) {
+	name = strings.TrimSpace(name)
+	for _, p := range st.People() {
+		if strings.EqualFold(p.Name, name) {
+			return p, nil
+		}
+	}
+	p := &model.Person{Name: name}
+	if err := st.PutPerson(p); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 func catalogIDs(cats *catalog.Registry) string {

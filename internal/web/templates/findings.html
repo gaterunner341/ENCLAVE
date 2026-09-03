@@ -70,7 +70,7 @@
         <td class="wrap"><a href="/findings/{{.ID}}">{{truncate 110 .Title}}</a>
           {{if .CVEs}}<div class="mono" style="color: var(--text-3); font-size: .74rem">{{truncate 70 (join " " .CVEs)}}</div>{{end}}</td>
         <td>{{template "assetlink" dict "Index" $d.AssetIndex "ID" .AssetID}}</td>
-        <td class="mono" style="font-size: .76rem">{{if .GroupID}}{{.GroupID}}{{else}}{{.RuleID}}{{end}}</td>
+        <td class="ident">{{if .GroupID}}{{.GroupID}}{{else}}{{.RuleID}}{{end}}</td>
         <td style="font-size: .76rem">
           {{range $cid, $refs := .ControlRefs}}<div class="mono">{{join " " $refs}}</div>{{else}}<span style="color: var(--text-3)">unmapped</span>{{end}}</td>
         <td>{{if .Decided}}<span class="badge {{dispositionClass .Disposition}}">{{.Disposition.Label}}</span>

@@ -253,6 +253,66 @@ func (s *Server) handleExportCSV(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
+	case "enclaves":
+		roles := s.Store.Roles()
+		header := []string{"Enclave", "Name", "Organisation", "Environment", "Status",
+			"Confidentiality", "Integrity", "Availability", "Categorisation",
+			"Authorisation", "Expires", "Networks", "Assets", "Open findings"}
+		for _, role := range roles {
+			header = append(header, role.Name)
+		}
+		_ = cw.Write(header)
+		for _, e := range s.enclavesFor(enclaveID) {
+			assets := s.Store.Assets(e.ID)
+			er := risk.ScoreEnclave(e, assets, s.Store.Findings(e.ID), now)
+			ranges := []string{}
+			for _, n := range e.Networks {
+				ranges = append(ranges, n.CIDR)
+			}
+			row := []string{
+				e.ID, e.Name, e.Organization, e.Environment, e.Status,
+				e.Confidentiality.Label(), e.Integrity.Label(), e.Availability.Label(),
+				e.Categorization().Label(), e.AuthorizationStatus, fmtDateP(e.AuthorizationExpires),
+				strings.Join(ranges, " "), strconv.Itoa(len(assets)), strconv.Itoa(er.Open),
+			}
+			// Who holds each post, resolved through the directory, so the file
+			// carries names rather than identifiers nobody outside can read.
+			for _, contact := range s.Store.Contacts(e.ID) {
+				name := ""
+				if contact.Person != nil {
+					name = contact.Person.Contact()
+					if contact.Inherited {
+						name += " (organisation-wide)"
+					}
+				}
+				row = append(row, name)
+			}
+			_ = cw.Write(row)
+		}
+
+	case "people":
+		_ = cw.Write([]string{"Name", "Job title", "Email", "Telephone", "Organisation",
+			"Location", "Status", "Holds organisation-wide", "Named on enclaves", "Notes"})
+		for _, p := range s.Store.People() {
+			use := s.Store.PersonUsage(p.ID)
+			orgRoles := []string{}
+			for _, role := range use.Roles {
+				orgRoles = append(orgRoles, role.Name)
+			}
+			enclaves := []string{}
+			for _, e := range use.Enclaves {
+				enclaves = append(enclaves, e.Name)
+			}
+			status := "Active"
+			if p.Inactive {
+				status = "No longer here"
+			}
+			_ = cw.Write([]string{
+				p.Name, p.Title, p.Email, p.Phone, p.Organization, p.Location, status,
+				strings.Join(orgRoles, "; "), strings.Join(enclaves, "; "), oneLineOf(p.Notes),
+			})
+		}
+
 	case "risks":
 		_ = cw.Write([]string{"Enclave", "Title", "Weakness", "Source", "Status", "Owner",
 			"Likelihood", "Impact", "Score", "Band", "Detected", "Due", "Completed",
@@ -286,7 +346,7 @@ func (s *Server) handleExportCSV(w http.ResponseWriter, r *http.Request) {
 		}
 
 	default:
-		http.Error(w, "Nothing is exported under that name. Use assets, findings, vulnerabilities, baseline or risks.", http.StatusNotFound)
+		http.Error(w, "Nothing is exported under that name. Use enclaves, assets, people, findings, vulnerabilities, baseline or risks.", http.StatusNotFound)
 	}
 }
 
@@ -312,6 +372,10 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		_ = enc.Encode(s.Store.Scans(enclaveID))
 	case "catalogs":
 		_ = enc.Encode(s.Catalogs.All())
+	case "people":
+		_ = enc.Encode(s.Store.People())
+	case "roles":
+		_ = enc.Encode(s.Store.Roles())
 	case "vulnerabilities", "cves":
 		_ = enc.Encode(risk.CVEs(s.Store.Findings(enclaveID), s.assetIndex(), now))
 	case "summary":
@@ -348,7 +412,7 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_ = enc.Encode(map[string]string{
 			"error":     "unknown collection",
-			"available": "enclaves, assets, findings, vulnerabilities, risks, scans, catalogs, summary",
+			"available": "enclaves, assets, people, roles, findings, vulnerabilities, risks, scans, catalogs, summary",
 		})
 	}
 }

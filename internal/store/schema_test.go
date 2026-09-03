@@ -138,3 +138,98 @@ func contains(hay, needle string) bool {
 	}
 	return false
 }
+
+func TestMigrationTurnsTypedContactsIntoPeople(t *testing.T) {
+	dir := t.TempDir()
+	// A data set as an earlier build wrote it: schema 1, contacts as free text.
+	old := `[
+	  {"id":"CORE","name":"Core Operations","owner":"D. Rennick","security_contact":"S. Ortiz",
+	   "confidentiality":"moderate","integrity":"moderate","availability":"high",
+	   "created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"},
+	  {"id":"LAB","name":"Engineering Lab","owner":"D. Rennick",
+	   "confidentiality":"low","integrity":"low","availability":"low",
+	   "created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}
+	]`
+	if err := os.WriteFile(filepath.Join(dir, "enclaves.json"), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSON(filepath.Join(dir, stampFile), Stamp{Schema: 1, WrittenBy: "old"}); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("data from the previous schema should open: %v", err)
+	}
+	if stamp, _, _ := ReadStamp(dir); stamp.Schema != SchemaVersion {
+		t.Errorf("the directory was not re-stamped: %d", stamp.Schema)
+	}
+
+	// The two names became two people, and the one named twice became one.
+	people := s.People()
+	if len(people) != 2 {
+		t.Fatalf("expected 2 people, got %d: %v", len(people), names(people))
+	}
+	byName := map[string]string{}
+	for _, p := range people {
+		byName[p.Name] = p.ID
+	}
+	if byName["D. Rennick"] == "" || byName["S. Ortiz"] == "" {
+		t.Fatalf("the typed names were not carried across: %v", names(people))
+	}
+
+	// And the enclaves point at them by role.
+	core, _ := s.Enclave("CORE")
+	ownerRole, ok := s.Role("system-owner")
+	if !ok {
+		t.Fatal("the built-in roles were not created")
+	}
+	if id, _ := core.Contact(ownerRole); id != byName["D. Rennick"] {
+		t.Errorf("CORE's System Owner = %q, want the record for D. Rennick", id)
+	}
+	isoRole, _ := s.Role("iso")
+	if id, _ := core.Contact(isoRole); id != byName["S. Ortiz"] {
+		t.Errorf("CORE's Information Security Officer = %q", id)
+	}
+	lab, _ := s.Enclave("LAB")
+	if id, _ := lab.Contact(ownerRole); id != byName["D. Rennick"] {
+		t.Error("the same person named on two enclaves should be one record used twice")
+	}
+	if id, _ := lab.Contact(isoRole); id != "" {
+		t.Error("LAB named no security contact, so it should have none")
+	}
+
+	// Running again changes nothing, because the directory is already there.
+	again, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again.People()) != 2 {
+		t.Errorf("reopening created duplicates: %v", names(again.People()))
+	}
+}
+
+func TestMigrationOnAnEmptyDirectory(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeJSON(filepath.Join(dir, stampFile), Stamp{Schema: 1}); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("an empty schema 1 directory should migrate cleanly: %v", err)
+	}
+	if len(s.People()) != 0 {
+		t.Error("nothing was there, so nobody should have been invented")
+	}
+	if len(s.Roles()) == 0 {
+		t.Error("the built-in roles should still be available")
+	}
+}
+
+func names(people []*model.Person) []string {
+	out := []string{}
+	for _, p := range people {
+		out = append(out, p.Name)
+	}
+	return out
+}

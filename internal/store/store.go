@@ -36,6 +36,8 @@ type Store struct {
 	findings    map[string]*model.Finding
 	assessments map[string]*model.Assessment
 	risks       map[string]*model.RiskEntry
+	people      map[string]*model.Person
+	roles       map[string]*model.Role
 
 	// findingsByAsset and findingsByEnclave avoid a full scan on every page.
 	findingsByAsset   map[string][]string
@@ -66,6 +68,8 @@ func Open(dir string) (*Store, error) {
 		findings:          map[string]*model.Finding{},
 		assessments:       map[string]*model.Assessment{},
 		risks:             map[string]*model.RiskEntry{},
+		people:            map[string]*model.Person{},
+		roles:             map[string]*model.Role{},
 		findingsByAsset:   map[string][]string{},
 		findingsByEnclave: map[string][]string{},
 		assetsByEnclave:   map[string][]string{},
@@ -98,6 +102,8 @@ func (s *Store) Reload() error {
 		findings:          map[string]*model.Finding{},
 		assessments:       map[string]*model.Assessment{},
 		risks:             map[string]*model.RiskEntry{},
+		people:            map[string]*model.Person{},
+		roles:             map[string]*model.Role{},
 		findingsByAsset:   map[string][]string{},
 		findingsByEnclave: map[string][]string{},
 		assetsByEnclave:   map[string][]string{},
@@ -112,6 +118,7 @@ func (s *Store) Reload() error {
 	}
 	s.enclaves, s.assets, s.scans = fresh.enclaves, fresh.assets, fresh.scans
 	s.findings, s.assessments, s.risks = fresh.findings, fresh.assessments, fresh.risks
+	s.people, s.roles = fresh.people, fresh.roles
 	s.findingsByAsset, s.findingsByEnclave = fresh.findingsByAsset, fresh.findingsByEnclave
 	s.assetsByEnclave, s.assetEnclave = fresh.assetsByEnclave, fresh.assetEnclave
 	s.fingerprints, s.dirty = fresh.fingerprints, map[string]bool{}
@@ -135,10 +142,13 @@ func (s *Store) load() error {
 		findings    []*model.Finding
 		assessments []*model.Assessment
 		risks       []*model.RiskEntry
+		people      []*model.Person
+		roles       []*model.Role
 	)
 	for _, t := range []target{
 		{"enclaves", &enclaves}, {"assets", &assets}, {"scans", &scans},
 		{"findings", &findings}, {"assessments", &assessments}, {"risks", &risks},
+		{"people", &people}, {"roles", &roles},
 	} {
 		b, err := os.ReadFile(s.path(t.name))
 		if os.IsNotExist(err) {
@@ -175,6 +185,21 @@ func (s *Store) load() error {
 	for _, r := range risks {
 		s.risks[r.ID] = r
 	}
+	for _, p := range people {
+		s.people[p.ID] = p
+	}
+	for _, r := range roles {
+		s.roles[r.ID] = r
+	}
+	// A directory with no posts in it cannot record who is responsible for
+	// anything, so the built-in set is restored when the file is absent.
+	if len(s.roles) == 0 {
+		for _, r := range model.DefaultRoles() {
+			role := r
+			s.roles[role.ID] = &role
+		}
+		s.dirty["roles"] = true
+	}
 	return nil
 }
 
@@ -202,6 +227,8 @@ func (s *Store) saveLocked() error {
 		"findings":    func() any { return sortedFindings(s.findings) },
 		"assessments": func() any { return sortedAssessments(s.assessments) },
 		"risks":       func() any { return sortedRisks(s.risks) },
+		"people":      func() any { return sortPeople(s.people) },
+		"roles":       func() any { return sortedRoles(s.roles) },
 	}
 	for name := range s.dirty {
 		fn, ok := writers[name]
@@ -280,6 +307,20 @@ func sortedAssessments(m map[string]*model.Assessment) []*model.Assessment {
 		out = append(out, v)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key() < out[j].Key() })
+	return out
+}
+
+func sortedRoles(m map[string]*model.Role) []*model.Role {
+	out := make([]*model.Role, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Order != out[j].Order {
+			return out[i].Order < out[j].Order
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 

@@ -1,0 +1,121 @@
+{{template "head" .}}
+{{$d := .Data}}
+<div class="page-head">
+  <div class="grow">
+    <h1>People and roles</h1>
+    <p class="lede">Everybody who holds a post over an enclave, recorded once. Enclaves point at
+      these records rather than carrying typed-in names, so a change of post is one edit and a
+      report can say who to ask.</p>
+  </div>
+  {{if not .ReadOnly}}<div><a class="btn primary" href="/people/new">Add somebody</a></div>{{end}}
+</div>
+
+<div class="card">
+  <header><h2>Directory</h2><span class="spacer"></span>
+    <input type="search" data-filters="people-table" placeholder="filter" style="width: 200px"></header>
+  {{if $d.Rows}}
+  <div class="table-wrap">
+    <table id="people-table" data-sortable>
+      <thead><tr><th data-sort="text">Name</th><th data-sort="text">Title</th>
+        <th data-sort="text">Contact</th><th data-sort="text">Organisation</th>
+        <th>Holds</th><th class="num" data-sort="number">Enclaves</th><th></th></tr></thead>
+      <tbody>
+      {{range $d.Rows}}{{$p := .Person}}
+      <tr>
+        <td><strong>{{$p.Name}}</strong>
+          {{if $p.Inactive}}<div><span class="badge plain">no longer here</span></div>{{end}}</td>
+        <td>{{if $p.Title}}{{$p.Title}}{{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
+        <td style="font-size: .82rem">
+          {{if $p.Email}}<div>{{$p.Email}}</div>{{end}}
+          {{if $p.Phone}}<div style="color: var(--text-3)">{{$p.Phone}}</div>{{end}}
+          {{if and (not $p.Email) (not $p.Phone)}}<span style="color: var(--text-3)">—</span>{{end}}</td>
+        <td style="font-size: .82rem">{{if $p.Organization}}{{$p.Organization}}{{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
+        <td style="font-size: .8rem">{{range .Roles}}<div>{{.}}</div>{{else}}<span style="color: var(--text-3)">nothing yet</span>{{end}}</td>
+        <td class="num">{{.Enclaves}}</td>
+        <td>{{if not $.ReadOnly}}<a class="btn small" href="/people/{{$p.ID}}/edit">Edit</a>{{end}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="empty">
+    <h3>Nobody on file yet</h3>
+    <p>Add the people who hold posts over your systems. They then appear in the dropdowns on
+       every enclave, instead of a name being typed in each time and spelled three ways.</p>
+    {{if not .ReadOnly}}<a class="btn primary" href="/people/new">Add somebody</a>{{end}}
+  </div>
+  {{end}}
+</div>
+
+<div class="card">
+  <header><h2>Roles</h2><span class="spacer"></span>
+    <span style="color: var(--text-3); font-size: .8rem">rename, reorder, add or remove to match your organisation</span></header>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width: 240px">Role</th><th>Held</th>
+        <th>Who holds it</th><th class="num" style="width: 5rem">Order</th><th></th></tr></thead>
+      <tbody>
+      {{range $d.Roles}}
+      <tr>
+        <form method="post" action="/roles/{{.ID}}/save" id="role-{{.ID}}"></form>
+        <td>
+          <input type="text" name="name" value="{{.Name}}" form="role-{{.ID}}" {{if $.ReadOnly}}disabled{{end}}>
+          <div class="mono" style="color: var(--text-3); font-size: .74rem; margin-top: .2rem">{{.ID}}</div>
+        </td>
+        <td>
+          <select name="scope" form="role-{{.ID}}" {{if $.ReadOnly}}disabled{{end}}>
+            <option value="system" {{if eq (printf "%s" .Scope) "system"}}selected{{end}}>Separately for each enclave</option>
+            <option value="organization" {{if eq (printf "%s" .Scope) "organization"}}selected{{end}}>Once for the organisation</option>
+          </select>
+          {{if .Description}}<div style="color: var(--text-3); font-size: .78rem; margin-top: .25rem">{{.Description}}</div>{{end}}
+        </td>
+        <td>
+          {{if eq (printf "%s" .Scope) "organization"}}
+          <select name="holder" form="role-{{.ID}}" {{if $.ReadOnly}}disabled{{end}}>
+            <option value="">Nobody yet</option>
+            {{$holder := .Holder}}
+            {{range $d.People}}<option value="{{.ID}}" {{if eq .ID $holder}}selected{{end}}>{{.Display}}</option>{{end}}
+          </select>
+          <div style="color: var(--text-3); font-size: .76rem; margin-top: .25rem">Every enclave inherits this.</div>
+          {{else}}
+          <span style="color: var(--text-3); font-size: .82rem">Chosen on each enclave.</span>
+          {{end}}
+        </td>
+        <td class="num"><input type="number" name="order" value="{{.Order}}" form="role-{{.ID}}"
+            style="width: 4.5rem" {{if $.ReadOnly}}disabled{{end}}></td>
+        <td style="white-space: nowrap">
+          {{if not $.ReadOnly}}
+          <button class="btn small" type="submit" form="role-{{.ID}}">Save</button>
+          <form method="post" action="/roles/{{.ID}}/delete" style="display: inline"
+                data-confirm="Remove the {{.Name}} role and every assignment to it?">
+            <button class="btn small danger" type="submit">Remove</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  {{if not .ReadOnly}}
+  <div class="card-body" style="border-top: 1px solid var(--border); background: var(--surface-2)">
+    <form method="post" action="/roles/new" style="display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap">
+      <div class="field" style="margin: 0; min-width: 240px; flex: 1">
+        <label for="new_role_name">Add a role</label>
+        <input type="text" id="new_role_name" name="name" placeholder="Privacy Officer" required>
+      </div>
+      <div class="field" style="margin: 0; min-width: 220px">
+        <label for="new_role_scope">Held</label>
+        <select id="new_role_scope" name="scope">
+          <option value="system">Separately for each enclave</option>
+          <option value="organization">Once for the organisation</option>
+        </select>
+      </div>
+      <button class="btn primary" type="submit">Add</button>
+    </form>
+  </div>
+  {{end}}
+</div>
+{{template "foot" .}}

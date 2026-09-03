@@ -83,6 +83,14 @@ what somebody claimed with what the scans found:
 **Contradicted** is the state the tool exists to produce. No document review
 finds it, because on paper the control is fine.
 
+**People.** A directory of who holds which post, recorded once. Enclaves point at
+those records rather than carrying typed-in names, so a change of post is one
+edit. Roles are yours to define: rename them, reorder them, add your own. A role
+held once for the organisation, such as the Chief Information Officer, is
+assigned there and inherited by every enclave; one held per system, such as the
+System Owner, is chosen on each. Exports carry the resolved names, not
+identifiers.
+
 **Assets in bulk.** The estate-wide asset list crosses enclaves, so moving a set
 of hosts from one to another is one job rather than one per enclave. Selections
 survive the filters, findings move with the assets, and anything that ended up

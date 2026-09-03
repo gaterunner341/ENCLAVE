@@ -75,7 +75,7 @@ func parseCKL(data []byte, filename string) (*Result, error) {
 			res.Scan.Version = strings.TrimSpace(info["version"] + " " + info["releaseinfo"])
 		}
 		if host.OS == "" {
-			host.OS = benchTitle
+			host.OS = platformFromBenchmark(benchTitle)
 		}
 		for _, v := range istig.Vulns {
 			attr := map[string]string{}
@@ -216,7 +216,7 @@ func parseCKLB(data []byte, filename string) (*Result, error) {
 			res.Scan.Version = strings.TrimSpace(st.Version + " " + st.ReleaseInfo)
 		}
 		if host.OS == "" {
-			host.OS = name
+			host.OS = platformFromBenchmark(name)
 		}
 		for _, r := range st.Rules {
 			sev := r.Severity
@@ -391,7 +391,7 @@ func parseXCCDF(data []byte, filename string) (*Result, error) {
 	}
 	host.IPs = model.Dedup(host.IPs)
 	host.MACs = model.Dedup(host.MACs)
-	host.OS = benchName
+	host.OS = platformFromBenchmark(benchName)
 
 	for _, rr := range results {
 		short := shortRuleID(rr.IDRef)
@@ -447,6 +447,31 @@ func shortRuleID(id string) string {
 		return id[i+1:]
 	}
 	return id
+}
+
+// platformFromBenchmark turns a benchmark title into the platform it is about.
+// A checklist carries no operating system field, so the benchmark name is the
+// only evidence of one, but "Microsoft Windows 11 Security Technical
+// Implementation Guide" is the name of a document rather than of a platform.
+func platformFromBenchmark(title string) string {
+	out := strings.TrimSpace(title)
+	for _, boilerplate := range []string{
+		"Security Technical Implementation Guide",
+		"Secure Technical Implementation Guide",
+		"Security Requirements Guide",
+		"Benchmark",
+		"STIG",
+		"SRG",
+	} {
+		if i := strings.Index(out, boilerplate); i >= 0 {
+			out = out[:i]
+		}
+	}
+	out = strings.TrimSpace(strings.Trim(strings.TrimSpace(out), "-–—:,"))
+	if out == "" {
+		return strings.TrimSpace(title)
+	}
+	return out
 }
 
 func firstNonEmpty(vals ...string) string {

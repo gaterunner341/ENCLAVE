@@ -65,7 +65,7 @@
       {{range $d.Rows}}
       <tr>
         <td><span class="badge {{severityClass .Severity}}">{{.Severity.Label}}</span></td>
-        <td class="mono"><a href="/vulnerabilities/{{.CVE}}"><strong>{{.CVE}}</strong></a>
+        <td class="ident"><a href="/vulnerabilities/{{.CVE}}"><strong>{{.CVE}}</strong></a>
           {{if not .Live}}<div><span class="badge disp-remediated">closed</span></div>{{end}}</td>
         <td class="wrap">{{truncate 80 .Title}}</td>
         <td class="num">{{if .CVSS}}{{num .CVSS}}{{else}}—{{end}}</td>

@@ -74,7 +74,17 @@ go test ./...
 
 The app opens on an empty overview. Do these in order.
 
-**1. Create an enclave.** Click **Enclaves → New enclave**.
+**1. Add the people who hold posts.** Click **People**. Put in your CIO, CISO,
+system owners, data owners and security officers once. Enclaves then pick from
+this list rather than having names typed into them, so a name is spelled the
+same everywhere and a change of post is one edit.
+
+The roles table on the same page is yours to change. Rename them, reorder them,
+add your own, remove what you do not use. A role held once for the whole
+organisation, such as the CIO, is assigned there and every enclave inherits it;
+one held per system, such as the System Owner, is chosen on each enclave.
+
+**2. Create an enclave.** Click **Enclaves → New enclave**.
 
 - Name: whatever you call the system, for example `Core Operations`
 - Address ranges: one CIDR per line, optionally with a label
@@ -86,11 +96,11 @@ The app opens on an empty overview. Do these in order.
 - Set the confidentiality, integrity and availability ratings. The overall
   categorisation is the highest of the three and it scales the risk score.
 
-**2. Assign a baseline.** On the enclave page, pick a framework and profile from
+**3. Assign a baseline.** On the enclave page, pick a framework and profile from
 the dropdown and click **Apply**. Start with NIST SP 800-53 Rev 5 moderate, or
 CIS Controls v8 Implementation Group 2, whichever your organisation uses.
 
-**3. Import a scan.** Click **Import**, choose your enclave, and upload whatever
+**4. Import a scan.** Click **Import**, choose your enclave, and upload whatever
 you have:
 
 - a vulnerability scan: a Nessus or ACAS export (`.nessus`)
@@ -116,17 +126,17 @@ link on its row in the assets list: both open the form already pinned to it. A
 pinned import contributes the platform detail and the dates, and never renames
 the host or touches its owner, criticality or role.
 
-**4. Load the real CCI list.** If you imported STIG or SCAP results, this is the
+**5. Load the real CCI list.** If you imported STIG or SCAP results, this is the
 step that makes the gap analysis useful. Download DISA's `U_CCI_List.xml` and
 load it under **Mappings**. It replaces the small starter table that ships with
 the app and re-checks every finding you have already imported.
 
-**5. Look at the vulnerabilities.** The **Vulnerabilities** page lists every CVE
+**6. Look at the vulnerabilities.** The **Vulnerabilities** page lists every CVE
 across the estate, worst first, with the hosts each one is on and how long it
 has been open. To record a single CVE nobody scanned for, use **Record a
 finding** on the host's own page.
 
-**6. Look at the gap analysis.** Enclave → **Baseline**. Start with the controls
+**7. Look at the gap analysis.** Enclave → **Baseline**. Start with the controls
 marked **Contradicted by scans**: somebody recorded those as implemented while
 the scans against them are failing.
 
@@ -154,6 +164,8 @@ enclave import --enclave CORE --place-by-address estate-wide.nessus
 enclave backup -o enclave-backup.zip        write everything to one file
 enclave restore enclave-backup.zip --yes   replace everything from one file
 
+enclave export enclaves  > systems.csv        with every point of contact resolved
+enclave export people    > directory.csv
 enclave export findings  --enclave CORE > findings.csv
 enclave export baseline  --enclave CORE > baseline.csv
 enclave export assets    > assets.csv

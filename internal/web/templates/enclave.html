@@ -136,8 +136,6 @@
       <div class="card-body">
         <div class="facts">
           <div><div class="k">Identifier</div><div class="v mono">{{$e.ID}}</div></div>
-          <div><div class="k">Owner</div><div class="v">{{if $e.Owner}}{{$e.Owner}}{{else}}—{{end}}</div></div>
-          <div><div class="k">Security contact</div><div class="v">{{if $e.SecurityContact}}{{$e.SecurityContact}}{{else}}—{{end}}</div></div>
           <div><div class="k">Organisation</div><div class="v">{{if $e.Organization}}{{$e.Organization}}{{else}}—{{end}}</div></div>
           <div><div class="k">Location</div><div class="v">{{if $e.Location}}{{$e.Location}}{{else}}—{{end}}</div></div>
           <div><div class="k">Environment</div><div class="v">{{if $e.Environment}}{{$e.Environment}}{{else}}—{{end}}</div></div>
@@ -158,6 +156,24 @@
         {{end}}
         {{if $e.Tags}}<div class="pill-row" style="margin-top: 1rem">{{range $e.Tags}}<span class="tag">{{.}}</span>{{end}}</div>{{end}}
       </div>
+    </div>
+
+    <div class="card">
+      <header><h3>Points of contact</h3><span class="spacer"></span>
+        {{if not .ReadOnly}}<a class="btn small" href="/enclaves/{{$e.ID}}/edit">Change</a>{{end}}</header>
+      <div class="table-wrap"><table><tbody>
+        {{range $d.Contacts}}
+        <tr>
+          <td style="width: 45%"><strong>{{.Role.Name}}</strong>
+            {{if .Inherited}}<div style="color: var(--text-3); font-size: .74rem">inherited from the organisation</div>{{end}}</td>
+          <td>{{if .Person}}{{.Person.Name}}
+              {{if .Person.Title}}<div style="color: var(--text-3); font-size: .78rem">{{.Person.Title}}</div>{{end}}
+              {{if .Person.Email}}<div style="font-size: .78rem">{{.Person.Email}}</div>{{end}}
+              {{if .Person.Inactive}}<div><span class="badge sev-medium">no longer here</span></div>{{end}}
+            {{else}}<span style="color: var(--text-3)">nobody assigned</span>{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody></table></div>
     </div>
 
     <div class="card">

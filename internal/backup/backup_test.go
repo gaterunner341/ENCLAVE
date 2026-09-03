@@ -21,7 +21,7 @@ func seed(t *testing.T) (string, *store.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &model.Enclave{ID: "CORE", Name: "Core Operations", Owner: "D. Rennick",
+	e := &model.Enclave{ID: "CORE", Name: "Core Operations",
 		Confidentiality: model.ImpactModerate}
 	if err := s.PutEnclave(e); err != nil {
 		t.Fatal(err)
@@ -47,6 +47,14 @@ func seed(t *testing.T) (string, *store.Store) {
 		Likelihood: 3, Impact: 4, Status: "open"}); err != nil {
 		t.Fatal(err)
 	}
+	// Somebody in the directory, holding a post over the enclave.
+	owner := &model.Person{Name: "D. Rennick", Title: "System Owner", Email: "d.rennick@example.org"}
+	if err := s.PutPerson(owner); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetContact("CORE", "system-owner", owner.ID); err != nil {
+		t.Fatal(err)
+	}
 	// An imported catalogue and mapping, which live in subdirectories and are
 	// exactly the sort of thing a naive backup forgets.
 	for _, f := range []struct{ path, body string }{
@@ -62,6 +70,15 @@ func seed(t *testing.T) (string, *store.Store) {
 		}
 	}
 	return dir, s
+}
+
+func mustRole(t *testing.T, s *store.Store, id string) model.Role {
+	t.Helper()
+	r, ok := s.Role(id)
+	if !ok {
+		t.Fatalf("no role %q", id)
+	}
+	return r
 }
 
 func writeBundle(t *testing.T, dir string) []byte {
@@ -93,6 +110,7 @@ func TestBundleCarriesEverything(t *testing.T) {
 		manifestName,
 		"data/enclaves.json", "data/assets.json", "data/findings.json",
 		"data/assessments.json", "data/risks.json", "data/schema.json",
+		"data/people.json", "data/roles.json",
 		"data/catalogs/acme.catalog", "data/mappings/local.csv",
 	} {
 		if !got[want] {
@@ -147,8 +165,18 @@ func TestRestoreIntoAFreshDirectory(t *testing.T) {
 		t.Fatalf("records did not survive the round trip: %+v", c)
 	}
 	e, ok := s.Enclave("CORE")
-	if !ok || e.Owner != "D. Rennick" {
+	if !ok || e.Name != "Core Operations" {
 		t.Errorf("enclave detail was lost: %+v", e)
+	}
+	// The directory travels with the data, or every contact would be lost.
+	if len(s.People()) != 1 || s.People()[0].Name != "D. Rennick" {
+		t.Errorf("the directory did not survive the round trip: %v", s.People())
+	}
+	if len(s.Roles()) == 0 {
+		t.Error("the roles did not survive the round trip")
+	}
+	if id, _ := e.Contact(mustRole(t, s, "system-owner")); id == "" {
+		t.Error("the enclave lost who its System Owner is")
 	}
 	a := s.Assets("CORE")[0]
 	if a.Name != "APP-SRV-01" || a.Criticality != model.CritMission {

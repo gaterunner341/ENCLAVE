@@ -1,0 +1,103 @@
+{{template "head" .}}
+{{$d := .Data}}{{$p := $d.Person}}{{$use := $d.Usage}}
+<div class="page-head">
+  <div class="grow">
+    <div class="crumbs"><a href="/people">People and roles</a></div>
+    <h1>{{if $d.IsNew}}Add somebody{{else}}Edit {{$p.Name}}{{end}}</h1>
+  </div>
+  <div>
+    <button class="btn primary" type="submit" form="person-form">Save</button>
+  </div>
+</div>
+
+<form method="post" id="person-form" action="{{if $d.IsNew}}/people/new{{else}}/people/{{$p.ID}}/edit{{end}}">
+<div class="split">
+  <div class="card">
+    <header><h2>Who they are</h2></header>
+    <div class="card-body">
+      <div class="field">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{{$p.Name}}" required autofocus>
+      </div>
+      <div class="form-grid">
+        <div class="field"><label for="title">Job title
+          <span class="hint">Shown beside the name in dropdowns, so two people with the same
+            surname can be told apart.</span></label>
+          <input type="text" id="title" name="title" value="{{$p.Title}}" placeholder="Chief Information Security Officer"></div>
+        <div class="field"><label for="organization">Organisation or office</label>
+          <input type="text" id="organization" name="organization" value="{{$p.Organization}}"></div>
+        <div class="field"><label for="email">Email</label>
+          <input type="text" id="email" name="email" value="{{$p.Email}}"></div>
+        <div class="field"><label for="phone">Telephone</label>
+          <input type="text" id="phone" name="phone" value="{{$p.Phone}}"></div>
+        <div class="field"><label for="location">Location</label>
+          <input type="text" id="location" name="location" value="{{$p.Location}}"></div>
+      </div>
+      <div class="field"><label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="3">{{$p.Notes}}</textarea></div>
+      <div class="check">
+        <input type="checkbox" id="inactive" name="inactive" {{if $p.Inactive}}checked{{end}}>
+        <label for="inactive">No longer here
+          <span class="hint">Keeps the record so old assignments still resolve, and stops
+            offering them for new ones.</span></label>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <header><h3>Where they are named</h3></header>
+      <div class="card-body">
+        {{if $use.Any}}
+        {{if $use.Roles}}
+        <div style="margin-bottom: .75rem">
+          <div class="k" style="font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); font-weight: 600">Organisation-wide</div>
+          {{range $use.Roles}}<div>{{.Name}}</div>{{end}}
+        </div>
+        {{end}}
+        {{if $use.Enclaves}}
+        <div class="k" style="font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); font-weight: 600">Enclaves</div>
+        {{range $use.Enclaves}}<div><a href="/enclaves/{{.ID}}">{{.Name}}</a></div>{{end}}
+        {{end}}
+        {{else}}
+        <p style="color: var(--text-3); margin: 0">Not named anywhere yet. Assign them a role on
+          an enclave, or make them the organisation-wide holder of one on the
+          <a href="/people">roles table</a>.</p>
+        {{end}}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="form-actions">
+  <button class="btn primary" type="submit">Save</button>
+  <a class="btn" href="/people">Cancel</a>
+</div>
+</form>
+
+{{if not $d.IsNew}}
+<div class="card" style="margin-top: 1.5rem; border-color: color-mix(in srgb, var(--bad) 30%, var(--border))">
+  <header><h3 style="color: var(--bad)">Remove {{$p.Name}}</h3></header>
+  <div class="card-body">
+    {{if $use.Any}}
+    <p>Their name comes off {{len $use.Enclaves}} enclaves and {{len $use.Roles}} organisation-wide
+      roles, which are then unassigned. Marking them as no longer here keeps the record instead.</p>
+    <form method="post" action="/people/{{$p.ID}}/delete"
+          data-confirm="Remove {{$p.Name}} and unassign every role they hold?"
+          style="display: flex; gap: .5rem; align-items: flex-end; max-width: 460px">
+      <div class="field" style="margin: 0; flex: 1">
+        <label for="confirm">Type the name to confirm</label>
+        <input type="text" id="confirm" name="confirm" placeholder="{{$p.Name}}" autocomplete="off">
+      </div>
+      <button class="btn danger" type="submit">Remove</button>
+    </form>
+    {{else}}
+    <p>They hold nothing, so removing them affects no other record.</p>
+    <form method="post" action="/people/{{$p.ID}}/delete" data-confirm="Remove {{$p.Name}}?">
+      <button class="btn danger" type="submit">Remove</button>
+    </form>
+    {{end}}
+  </div>
+</div>
+{{end}}
+{{template "foot" .}}

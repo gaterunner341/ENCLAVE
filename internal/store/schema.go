@@ -11,7 +11,7 @@ import (
 // SchemaVersion is the layout of the data directory that this build writes and
 // understands. It goes up whenever a change would stop an older build reading
 // what a newer one wrote, which is the only thing that makes an upgrade unsafe.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // stampFile records what wrote the data directory, so that a build can tell
 // whether it is looking at data it understands before it touches any of it.
@@ -91,7 +91,13 @@ type migration struct {
 	apply    func(dir string) error
 }
 
-var migrations []migration
+var migrations = []migration{
+	{
+		from: 1, to: 2,
+		describe: "points of contact become a directory of people",
+		apply:    migrateContactsToPeople,
+	},
+}
 
 // prepare brings a data directory up to the current schema, or reports clearly
 // why it cannot. It runs before anything is read.
@@ -103,6 +109,7 @@ func prepare(dir string) error {
 	if stamp.Schema > SchemaVersion {
 		return &ErrNewerSchema{Found: stamp.Schema, Understood: SchemaVersion, WrittenBy: stamp.WrittenBy}
 	}
+	migrated := false
 	for stamp.Schema < SchemaVersion {
 		step, ok := nextMigration(stamp.Schema)
 		if !ok {
@@ -116,10 +123,13 @@ func prepare(dir string) error {
 				step.from, step.to, step.describe, err)
 		}
 		stamp.Schema = step.to
+		migrated = true
 	}
-	// Stamping an unstamped directory records what has been established about
-	// it, so the next start does not have to work it out again.
-	if !stamped || stamp.Schema != SchemaVersion {
+	// Recording what has been established means the next start does not work it
+	// out again: an unstamped directory gets a stamp, and a directory that has
+	// just been migrated gets the version it was migrated to. Leaving the old
+	// stamp in place would run every migration again on every start.
+	if !stamped || migrated || stamp.Schema != SchemaVersion {
 		return WriteStamp(dir, BuildVersion)
 	}
 	return nil

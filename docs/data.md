@@ -15,6 +15,8 @@ enclave-data/
   findings.json      every scan result, with its history and decisions
   assessments.json   control implementation statements
   risks.json         the risk register
+  people.json        the directory of who holds which post
+  roles.json         the posts themselves, and who holds the organisation-wide ones
   catalogs/          control frameworks you imported
   mappings/          translation tables you imported
   backups/           bundles ENCLAVE wrote for itself
@@ -84,6 +86,18 @@ line, restoring over an install that already holds records stops and asks;
 | Stamp matches this build | Opened directly |
 | Stamp is older than this build | Upgraded in place, then re-stamped |
 | Stamp is newer than this build | Refused, naming the version that wrote it |
+
+### The migrations so far
+
+**1 to 2, points of contact become a directory.** Enclaves used to carry a
+system owner and a security contact as free text. Those names are moved into
+`people.json` and the enclaves point at them by role, so the same person named
+on five systems becomes one record used five times.
+
+Two people typed the same way become one record. Two typed differently stay
+separate: guessing that "D. Rennick" and "Dave Rennick" are the same person is
+not a guess a tool should make on an authorisation record. Merge them by hand on
+the People page if they are.
 
 The last row is the one that matters. Reading a layout from the future means
 guessing, and a wrong guess writes back something neither version can use. So it

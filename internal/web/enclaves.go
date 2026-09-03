@@ -119,12 +119,20 @@ func (s *Server) handleEnclaveList(w http.ResponseWriter, r *http.Request) {
 		Open    int
 		Index   float64
 		Band    string
+		Owner   *model.Person
 	}
 	rows := []row{}
 	for _, e := range s.Store.Enclaves() {
 		assets := s.Store.Assets(e.ID)
 		er := risk.ScoreEnclave(e, assets, s.Store.Findings(e.ID), now)
-		rows = append(rows, row{Enclave: e, Assets: len(assets), Open: er.Open, Index: er.Index, Band: er.Band})
+		rw := row{Enclave: e, Assets: len(assets), Open: er.Open, Index: er.Index, Band: er.Band}
+		// The system owner is the name people scan this table for.
+		if role, ok := s.Store.Role("system-owner"); ok {
+			if id, _ := e.Contact(role); id != "" {
+				rw.Owner, _ = s.Store.Person(id)
+			}
+		}
+		rows = append(rows, rw)
 	}
 	s.render(w, r, "enclaves.html", page{
 		Title: "Enclaves", Nav: "enclaves",
@@ -177,6 +185,7 @@ func (s *Server) handleEnclaveOverview(w http.ResponseWriter, r *http.Request) {
 			"AssetIndex": s.assetIndex(),
 			"Overdue":    firstNF(risk.OverdueFindings(findings, now), 8),
 			"Available":  s.Catalogs.All(),
+			"Contacts":   s.Store.Contacts(e.ID),
 		},
 	})
 }
@@ -208,8 +217,18 @@ func (s *Server) handleEnclaveForm(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, r, "enclave_form.html", page{
 		Title: title, Nav: "enclaves", SubNav: "settings", Enclave: e,
-		Data: map[string]any{"Enclave": e, "IsNew": e.ID == "", "Catalogs": s.Catalogs.All()},
+		Data: s.enclaveFormData(e, e.ID == ""),
 	})
+}
+
+// enclaveFormData is what the enclave form needs, gathered in one place so the
+// version rendered after a validation error carries everything the first one did.
+func (s *Server) enclaveFormData(e *model.Enclave, isNew bool) map[string]any {
+	return map[string]any{
+		"Enclave": e, "IsNew": isNew, "Catalogs": s.Catalogs.All(),
+		"Roles": s.Store.Roles(), "People": s.Store.ActivePeople(),
+		"PersonIndex": s.Store.PersonIndex(),
+	}
 }
 
 func (s *Server) handleEnclaveSave(w http.ResponseWriter, r *http.Request) {
@@ -236,8 +255,6 @@ func (s *Server) handleEnclaveSave(w http.ResponseWriter, r *http.Request) {
 	}
 	e.Name = f.str("name")
 	e.Description = f.str("description")
-	e.Owner = f.str("owner")
-	e.SecurityContact = f.str("security_contact")
 	e.Organization = f.str("organization")
 	e.Location = f.str("location")
 	e.Environment = f.str("environment")
@@ -257,10 +274,22 @@ func (s *Server) handleEnclaveSave(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	e.Contacts = map[string]string{}
+	for _, role := range s.Store.Roles() {
+		if who := f.str("contact_" + role.ID); who != "" {
+			if _, ok := s.Store.Person(who); ok {
+				e.Contacts[role.ID] = who
+			}
+		}
+	}
+	if len(e.Contacts) == 0 {
+		e.Contacts = nil
+	}
+
 	if err := s.Store.PutEnclave(e); err != nil {
 		s.render(w, r, "enclave_form.html", page{
 			Title: "Enclave", Nav: "enclaves", Error: err.Error(),
-			Data: map[string]any{"Enclave": e, "IsNew": id == "", "Catalogs": s.Catalogs.All()},
+			Data: s.enclaveFormData(e, id == ""),
 		})
 		return
 	}

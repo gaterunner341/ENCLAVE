@@ -40,7 +40,7 @@
         <tbody>{{range $d.Worst}}
         <tr>
           <td><span class="badge {{stateClass .State}}">{{.State.Label}}</span></td>
-          <td class="mono"><a href="/enclaves/{{$e.ID}}/baseline/{{$cat.ID}}/{{.Control.ID}}">{{.Control.ID}}</a></td>
+          <td class="ident"><a href="/enclaves/{{$e.ID}}/baseline/{{$cat.ID}}/{{.Control.ID}}">{{.Control.ID}}</a></td>
           <td class="wrap">{{.Control.Title}}</td>
           <td class="num">{{.OpenCount}}</td>
           <td class="num">{{.Assets}}</td>
@@ -79,7 +79,7 @@
           <th>Implementation</th><th class="num">Findings</th><th class="num">Assets</th></tr></thead>
         <tbody>{{range .Controls}}
         <tr>
-          <td class="mono"><a href="/enclaves/{{$e.ID}}/baseline/{{$cat.ID}}/{{.Control.ID}}">{{.Control.ID}}</a></td>
+          <td class="ident"><a href="/enclaves/{{$e.ID}}/baseline/{{$cat.ID}}/{{.Control.ID}}">{{.Control.ID}}</a></td>
           <td class="wrap">{{.Control.Title}}</td>
           <td><span class="badge {{stateClass .State}}">{{.State.Label}}</span></td>
           <td style="font-size: .8rem">{{if .Assessment}}{{.Assessment.Status.Label}}

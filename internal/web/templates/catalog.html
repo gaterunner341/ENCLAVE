@@ -34,7 +34,7 @@
       {{range $d.Families}}{{$fam := .}}
       {{range .Controls}}
       <tr>
-        <td class="mono">{{.ID}}</td>
+        <td class="ident">{{.ID}}</td>
         <td class="wrap">{{.Title}}{{if .Statement}}<div style="color: var(--text-3); font-size: .78rem">{{truncate 160 .Statement}}</div>{{end}}</td>
         <td style="font-size: .8rem">{{$fam.ID}} {{$fam.Name}}</td>
         <td style="font-size: .76rem">{{join ", " .Profiles}}</td>

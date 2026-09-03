@@ -411,3 +411,30 @@ func TestARowWithATitleAndACVEKeepsItsTitle(t *testing.T) {
 		t.Errorf("title = %q, want the title column to win", got)
 	}
 }
+
+func TestPlatformIsTakenFromTheBenchmarkWithoutItsBoilerplate(t *testing.T) {
+	for in, want := range map[string]string{
+		"Microsoft Windows 11 Security Technical Implementation Guide":       "Microsoft Windows 11",
+		"Red Hat Enterprise Linux 9 Security Technical Implementation Guide": "Red Hat Enterprise Linux 9",
+		"Cisco IOS XE Router NDM Security Technical Implementation Guide":    "Cisco IOS XE Router NDM",
+		"Application Security and Development Security Requirements Guide":   "Application Security and Development",
+		"Windows Server 2022 STIG": "Windows Server 2022",
+		// Nothing recognisable to strip, so it is left alone.
+		"Some Local Hardening Standard": "Some Local Hardening Standard",
+		"":                              "",
+	} {
+		if got := platformFromBenchmark(in); got != want {
+			t.Errorf("platformFromBenchmark(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestCKLSetsAReadablePlatform(t *testing.T) {
+	res, err := Parse(read(t, "sample.ckl"), "sample.ckl", CSVOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Hosts[0].OS; got != "Microsoft Windows Server 2022" {
+		t.Errorf("platform = %q; the document's name is not the platform's name", got)
+	}
+}

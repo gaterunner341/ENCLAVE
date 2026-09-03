@@ -250,6 +250,10 @@ tbody tr:hover { background: var(--surface-2); }
 tbody tr:last-child td { border-bottom: none; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 td.mono { font-family: var(--mono); font-size: .8rem; }
+/* An identifier is one token however narrow the column gets. Breaking
+   V-253260 across two lines makes it unreadable and unsearchable. */
+td.ident, .ident { font-family: var(--mono); font-size: .8rem; white-space: nowrap; }
+.badge.mono, td.mono .mono { white-space: nowrap; }
 td.wrap { white-space: normal; }
 .table-note { padding: .6rem 1rem; color: var(--text-3); font-size: .8rem; background: var(--surface-2); }
 

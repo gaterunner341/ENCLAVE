@@ -74,7 +74,7 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	e := &model.Enclave{
-		ID: "CORE", Name: "Core Operations", Owner: "D. Rennick",
+		ID: "CORE", Name: "Core Operations",
 		Environment: "Production", Status: "Active",
 		Confidentiality: model.ImpactModerate, Integrity: model.ImpactModerate,
 		Availability: model.ImpactHigh,
@@ -1587,6 +1587,270 @@ func TestLongFormsOfferSaveWithoutScrolling(t *testing.T) {
 		id = id[:strings.Index(id, `"`)]
 		if !strings.Contains(body, `id="`+id+`"`) {
 			t.Errorf("%s: the header button targets %q, which is not on the page", path, id)
+		}
+	}
+}
+
+func TestPeopleDirectoryAndRoles(t *testing.T) {
+	h := newHarness(t)
+	if !strings.Contains(h.get("/").Body.String(), `href="/people"`) {
+		t.Error("nothing links to the directory")
+	}
+	page := h.get("/people")
+	if page.Code != http.StatusOK || strings.Contains(page.Body.String(), "could not be rendered") {
+		t.Fatalf("got %d: %s", page.Code, truncateBody(page.Body.String()))
+	}
+	// The posts ENCLAVE starts with are the ones that were asked for.
+	body := page.Body.String()
+	for _, want := range []string{
+		"Chief Information Officer", "Chief Information Security Officer",
+		"System Owner", "Data Owner", "Information Security Officer",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the roles table is missing %q", want)
+		}
+	}
+
+	rec := h.post("/people/new", url.Values{
+		"name": {"D. Rennick"}, "title": {"Director of Infrastructure"},
+		"email": {"d.rennick@example.org"}, "phone": {"555 0100"},
+		"organization": {"Office of the CIO"},
+	})
+	if rec.Code != http.StatusSeeOther || strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("save = %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	people := h.Store.People()
+	if len(people) != 1 || people[0].Name != "D. Rennick" {
+		t.Fatalf("directory = %v", people)
+	}
+	if !strings.Contains(h.get("/people").Body.String(), "d.rennick@example.org") {
+		t.Error("the directory does not show how to reach them")
+	}
+
+	// A bad email is caught rather than stored.
+	rec = h.post("/people/new", url.Values{"name": {"Someone"}, "email": {"555 0100"}})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "email address") {
+		t.Error("a telephone number in the email box should be refused")
+	}
+}
+
+func TestOrganisationRoleIsInheritedByEveryEnclave(t *testing.T) {
+	h := newHarness(t)
+	ciso := &model.Person{Name: "A. Vance", Title: "CISO"}
+	if err := h.Store.PutPerson(ciso); err != nil {
+		t.Fatal(err)
+	}
+	// Recording the holder once, on the roles table.
+	rec := h.post("/roles/ciso/save", url.Values{
+		"name": {"Chief Information Security Officer"}, "scope": {"organization"},
+		"holder": {ciso.ID}, "order": {"20"},
+	})
+	if rec.Code != http.StatusSeeOther || strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("role save = %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+
+	// Every enclave inherits it without naming anybody.
+	for _, id := range []string{"CORE", "LAB"} {
+		e, _ := h.Store.Enclave(id)
+		role, _ := h.Store.Role("ciso")
+		who, inherited := e.Contact(role)
+		if who != ciso.ID || !inherited {
+			t.Errorf("%s: contact = %q inherited=%v, want the organisation-wide holder", id, who, inherited)
+		}
+	}
+	if !strings.Contains(h.get("/enclaves/CORE").Body.String(), "inherited from the organisation") {
+		t.Error("the enclave page does not say the name is inherited")
+	}
+
+	// And an enclave can name somebody else instead.
+	local := &model.Person{Name: "R. Okafor"}
+	if err := h.Store.PutPerson(local); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Store.SetContact("CORE", "ciso", local.ID); err != nil {
+		t.Fatal(err)
+	}
+	e, _ := h.Store.Enclave("CORE")
+	role, _ := h.Store.Role("ciso")
+	who, inherited := e.Contact(role)
+	if who != local.ID || inherited {
+		t.Errorf("a named contact should override the inherited one, got %q inherited=%v", who, inherited)
+	}
+}
+
+func TestEnclaveFormOffersTheDirectoryAndSavesTheChoice(t *testing.T) {
+	h := newHarness(t)
+	owner := &model.Person{Name: "S. Ortiz", Title: "System Owner"}
+	if err := h.Store.PutPerson(owner); err != nil {
+		t.Fatal(err)
+	}
+	form := h.get("/enclaves/CORE/edit").Body.String()
+	if strings.Contains(form, `name="owner"`) || strings.Contains(form, `name="security_contact"`) {
+		t.Error("the form still asks for contacts as free text")
+	}
+	for _, want := range []string{`name="contact_system-owner"`, `name="contact_ciso"`, "S. Ortiz"} {
+		if !strings.Contains(form, want) {
+			t.Errorf("the form is missing %q", want)
+		}
+	}
+
+	rec := h.post("/enclaves/CORE/edit", url.Values{
+		"name": {"Core Operations"}, "confidentiality": {"moderate"},
+		"integrity": {"moderate"}, "availability": {"high"},
+		"contact_system-owner": {owner.ID},
+	})
+	if rec.Code != http.StatusSeeOther || strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("save = %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	e, _ := h.Store.Enclave("CORE")
+	if e.Contacts["system-owner"] != owner.ID {
+		t.Fatalf("contacts = %v", e.Contacts)
+	}
+	// The name reaches the pages that report it.
+	if !strings.Contains(h.get("/enclaves/CORE").Body.String(), "S. Ortiz") {
+		t.Error("the enclave overview does not name its System Owner")
+	}
+	if !strings.Contains(h.get("/enclaves").Body.String(), "S. Ortiz") {
+		t.Error("the enclaves table does not name the System Owner")
+	}
+	// A person who is not on file is not silently accepted.
+	rec = h.post("/enclaves/CORE/edit", url.Values{
+		"name": {"Core Operations"}, "contact_system-owner": {"person-does-not-exist"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("got %d", rec.Code)
+	}
+	e, _ = h.Store.Enclave("CORE")
+	if _, held := e.Contacts["system-owner"]; held {
+		t.Error("an identifier that names nobody was stored as a contact")
+	}
+}
+
+func TestRemovingSomebodyTakesTheirNameOffRecords(t *testing.T) {
+	h := newHarness(t)
+	p := &model.Person{Name: "T. Byrne"}
+	if err := h.Store.PutPerson(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Store.SetContact("CORE", "system-owner", p.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Removing somebody who is named needs the name typed, as deleting an
+	// enclave does.
+	rec := h.post("/people/"+p.ID+"/delete", url.Values{"confirm": {"wrong"}})
+	if !strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Error("removing a named person without confirming should be refused")
+	}
+	if _, ok := h.Store.Person(p.ID); !ok {
+		t.Fatal("they were removed anyway")
+	}
+	rec = h.post("/people/"+p.ID+"/delete", url.Values{"confirm": {"T. Byrne"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("got %d", rec.Code)
+	}
+	if _, ok := h.Store.Person(p.ID); ok {
+		t.Error("they were not removed")
+	}
+	e, _ := h.Store.Enclave("CORE")
+	if _, held := e.Contacts["system-owner"]; held {
+		t.Error("a reference to somebody who no longer exists was left behind")
+	}
+	// The page still renders with the role unassigned.
+	if body := h.get("/enclaves/CORE").Body.String(); strings.Contains(body, "could not be rendered") {
+		t.Fatal(truncateBody(body))
+	}
+}
+
+func TestRolesCanBeAddedAndRemoved(t *testing.T) {
+	h := newHarness(t)
+	rec := h.post("/roles/new", url.Values{"name": {"Privacy Officer"}, "scope": {"system"}})
+	if rec.Code != http.StatusSeeOther || strings.Contains(rec.Header().Get("Location"), "err=") {
+		t.Fatalf("add = %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	role, ok := h.Store.Role("Privacy-Officer")
+	if !ok {
+		t.Fatalf("the role was not created: %v", h.Store.Roles())
+	}
+	if role.Scope != model.ScopeSystem {
+		t.Errorf("scope = %q", role.Scope)
+	}
+	// With nobody on file the form has nothing to offer, and says so rather
+	// than rendering a row of empty dropdowns.
+	empty := h.get("/enclaves/CORE/edit").Body.String()
+	if !strings.Contains(empty, "Nobody is on file yet") {
+		t.Error("with an empty directory the form should say so")
+	}
+	p := &model.Person{Name: "K. Adeyemi"}
+	if err := h.Store.PutPerson(p); err != nil {
+		t.Fatal(err)
+	}
+	// Once somebody exists, the new role is offered alongside the built-in ones.
+	form := h.get("/enclaves/CORE/edit").Body.String()
+	if !strings.Contains(form, "Privacy Officer") || !strings.Contains(form, `name="contact_`+role.ID+`"`) {
+		t.Error("a new role does not appear on the enclave form")
+	}
+	// Removing it takes its assignments with it.
+	if err := h.Store.SetContact("CORE", role.ID, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if rec := h.post("/roles/"+role.ID+"/delete", nil); rec.Code != http.StatusSeeOther {
+		t.Fatalf("delete = %d", rec.Code)
+	}
+	e, _ := h.Store.Enclave("CORE")
+	if _, held := e.Contacts[role.ID]; held {
+		t.Error("removing a role left its assignments behind")
+	}
+}
+
+func TestPeopleAreReadOnlySafe(t *testing.T) {
+	h := newHarness(t)
+	h.ReadOnly = true
+	for _, p := range []string{
+		"/people/new", "/roles/new", "/roles/ciso/save", "/roles/ciso/delete",
+	} {
+		if code := h.post(p, url.Values{"name": {"x"}}).Code; code != http.StatusForbidden {
+			t.Errorf("POST %s = %d in read-only mode, want 403", p, code)
+		}
+	}
+	if code := h.get("/people").Code; code != http.StatusOK {
+		t.Errorf("read-only mode broke the directory: %d", code)
+	}
+}
+
+func TestPeopleAndEnclaveExports(t *testing.T) {
+	h := newHarness(t)
+	p := &model.Person{Name: "D. Rennick", Title: "System Owner", Email: "d.rennick@example.org"}
+	if err := h.Store.PutPerson(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Store.SetContact("CORE", "system-owner", p.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := h.get("/export/people")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("people export = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "D. Rennick") || !strings.Contains(body, "Core Operations") {
+		t.Errorf("the people export does not say who is named where:\n%s", truncateBody(body))
+	}
+
+	rec = h.get("/export/enclaves")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enclave export = %d", rec.Code)
+	}
+	body = rec.Body.String()
+	// The file carries names rather than identifiers, so it is readable by
+	// somebody who does not have ENCLAVE in front of them.
+	if !strings.Contains(body, "System Owner") || !strings.Contains(body, "d.rennick@example.org") {
+		t.Errorf("the enclave export has no resolved contacts:\n%s", truncateBody(body))
+	}
+
+	for _, kind := range []string{"people", "roles"} {
+		rec := h.get("/api/" + kind)
+		if rec.Code != http.StatusOK || !strings.HasPrefix(strings.TrimSpace(rec.Body.String()), "[") {
+			t.Errorf("api %s = %d", kind, rec.Code)
 		}
 	}
 }

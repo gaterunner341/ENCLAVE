@@ -23,7 +23,7 @@
   <div class="table-wrap">
     <table data-sortable>
       <thead><tr>
-        <th data-sort="text">Enclave</th><th data-sort="text">Owner</th>
+        <th data-sort="text">Enclave</th><th data-sort="text">System owner</th>
         <th data-sort="text">Environment</th><th data-sort="text">Categorisation</th>
         <th>Networks</th><th data-sort="text">Authorisation</th>
         <th class="num" data-sort="number">Assets</th><th class="num" data-sort="number">Open</th>
@@ -34,7 +34,9 @@
       <tr>
         <td><a href="/enclaves/{{$e.ID}}"><strong>{{$e.Name}}</strong></a>
           <div class="mono" style="color: var(--text-3); font-size: .75rem">{{$e.ID}}</div></td>
-        <td>{{if $e.Owner}}{{$e.Owner}}{{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
+        <td>{{if .Owner}}{{.Owner.Name}}
+            {{if .Owner.Title}}<div style="color: var(--text-3); font-size: .76rem">{{.Owner.Title}}</div>{{end}}
+            {{else}}<span style="color: var(--text-3)">—</span>{{end}}</td>
         <td>{{$e.Environment}}{{if $e.Status}}<div style="color: var(--text-3); font-size: .78rem">{{$e.Status}}</div>{{end}}</td>
         <td><span class="badge plain">{{$e.Categorization.Label}}</span>
           <div style="color: var(--text-3); font-size: .74rem">C {{$e.Confidentiality.Label}} · I {{$e.Integrity.Label}} · A {{$e.Availability.Label}}</div></td>
