@@ -5,7 +5,9 @@
 #
 # ENCLAVE has no accounts of its own. Everything that decides who gets in is
 # in this file, so it is worth reading before you rely on it.
-
+#
+# caddy fmt wants no blank line between this comment and the block below, and
+# it says so in the proxy's log on every start when there is one.
 {
 	# Nothing here needs the admin API, and it is one less thing listening.
 	admin off
