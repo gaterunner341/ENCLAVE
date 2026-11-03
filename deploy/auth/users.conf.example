@@ -1,0 +1,26 @@
+# Who may reach ENCLAVE through the proxy.
+#
+# Copy this file to users.conf in the same directory — the proxy reads
+# users.conf and will not start without it.
+#
+# Generate a hash for each person, one at a time:
+#
+#   docker run --rm caddy:2-alpine caddy hash-password --plaintext 'the password'
+#
+# Paste the result after the username. Do not quote it and do not escape the
+# dollar signs: this file is read by the proxy directly, not through a compose
+# file, so the hash goes in exactly as printed.
+#
+# These accounts are the only thing standing in front of the risk register.
+# Give each person their own, and remove the line when they leave.
+
+# One line per person, inside the block, in the form
+#
+#   username <hash>
+#
+# A block with no accounts in it is an error, so the proxy will not start on
+# an unedited copy of this file either.
+
+basic_auth {
+
+}

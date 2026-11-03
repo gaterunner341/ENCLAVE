@@ -38,6 +38,23 @@ Your data lands in `enclave-data` next to the executable.
 minutes, every command line flag, where the data lives, and what to do before
 putting it on a shared machine.
 
+### On a server, for a team
+
+```
+cp env.example .env           # optional; every default works
+docker compose up -d --build
+```
+
+That publishes on the server's own `127.0.0.1:8080` and nowhere else, so you
+reach it with `ssh -L 8080:127.0.0.1:8080 you@server` until you have decided
+what goes in front of it. ENCLAVE has no sign-in of its own, so something has
+to: your existing reverse proxy, or the TLS-and-password proxy bundled in the
+compose file under `--profile tls`.
+
+**[docs/deploying.md](docs/deploying.md) is the deployment guide**: the three
+ways to front it, every setting, backups, upgrades, where connector API keys
+should live, and what the compose file already does about hardening.
+
 ## What it does
 
 **Enclaves.** A bounded system: whatever your organisation calls an
@@ -127,6 +144,12 @@ enclave export findings --enclave CORE > findings.csv
 beside the executable and can also be set with `ENCLAVE_DATA`. Copy that folder
 to back everything up; delete it to start over.
 
+Every serve option also reads the environment, which is how a container or a
+systemd unit configures a process: `ENCLAVE_ADDR`, `ENCLAVE_DATA`,
+`ENCLAVE_READ_ONLY`, `ENCLAVE_NO_BROWSER`. A flag wins over the environment.
+`enclave healthcheck` probes a running instance and exits 0 or 1, which is
+what the container image uses as its own health check.
+
 ## Getting started
 
 1. **Create an enclave** and give it the address ranges it owns. Ranges may
@@ -215,6 +238,7 @@ before anything is written, and whatever a restore replaces is saved to
 ## Documentation
 
 - **[RUN.md](RUN.md)** — how to run it, the first five minutes, every command
+- **[docs/deploying.md](docs/deploying.md)** — running it on a server with Docker: what has to sit in front of it, every setting, backups, upgrades
 - [docs/importing.md](docs/importing.md) — what is read from each file format, and the asset and finding identity rules
 - [docs/mappings.md](docs/mappings.md) — how findings reach controls, the CCI list, crosswalks between frameworks
 - [docs/risk-scoring.md](docs/risk-scoring.md) — exactly how the numbers are produced, and what they are not
@@ -233,6 +257,11 @@ internal/mapping    findings to control identifiers, and nothing invented
 internal/importer   applying a parsed result: asset matching, control mapping
 internal/risk       scoring and the gap analysis
 internal/web        the interface: handlers, templates, one stylesheet
+
+Dockerfile          the image: static build, then Alpine and the CA bundle
+docker-compose.yml  the deployment, with an opt-in TLS and password proxy
+env.example         every deployment setting, with its default
+deploy/             the proxy's configuration, accounts, and certificates
 ```
 
 ## Building
@@ -247,13 +276,22 @@ go build ./cmd/enclave
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
   go build -trimpath -ldflags "-s -w -X main.version=$(git describe --tags --always)" \
   -o ENCLAVE.exe ./cmd/enclave
+
+# the container image, and the test suite inside it
+docker build -t enclave:latest .
+docker build --target test .
 ```
+
+The image build needs no network beyond pulling its two base images: there are
+no modules to download.
 
 ## Known limits
 
 - **There is no authentication.** It binds to loopback for that reason. Binding
   it anywhere else prints a warning and is only safe behind something that does
   authenticate. `--read-only` disables every write but is not an access control.
+  For a server, [docs/deploying.md](docs/deploying.md) sets out the three ways
+  to put something in front of it; the compose file bundles one of them.
 - Uploads through the browser are capped at 128 MB. A larger export belongs in
   the `import` subcommand.
 - Records are held in memory and written as JSON. That is comfortable into the

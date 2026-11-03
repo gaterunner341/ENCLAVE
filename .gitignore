@@ -13,3 +13,10 @@
 *.swp
 .idea/
 .vscode/
+
+# deployment: local settings and anything that authenticates
+.env
+enclave.env
+/deploy/auth/users.conf
+/deploy/certs/*
+!/deploy/certs/README.md

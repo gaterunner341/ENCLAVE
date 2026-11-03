@@ -67,6 +67,12 @@ also a switch to skip verification entirely, named so that nobody turns it on by
 accident: it accepts whatever certificate the console presents, including one an
 attacker substituted.
 
+In a container deployment, put the bundle in `deploy/certs/` beside the compose
+file. It is mounted read-only at `/certs`, so a file named
+`securitycenter-ca.pem` is referenced on the connector as
+`/certs/securitycenter-ca.pem`. For keeping API keys out of the data volume in
+that deployment, see [docs/deploying.md](deploying.md).
+
 ## Using it
 
 **Test the connection** makes one call and reports what it found, so a wrong

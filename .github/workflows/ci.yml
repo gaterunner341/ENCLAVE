@@ -69,3 +69,96 @@ jobs:
           name: ENCLAVE-windows-amd64
           path: ENCLAVE.exe
           if-no-files-found: error
+
+  docker:
+    name: Container image
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: |
+          docker build --target runtime \
+            --build-arg VERSION="ci-${GITHUB_SHA::8}" \
+            -t enclave:ci .
+
+      - name: It runs as uid 65532, not root
+        run: |
+          id="$(docker run --rm --entrypoint id enclave:ci -u)"
+          echo "runs as uid $id"
+          test "$id" = "65532"
+
+      - name: It works under the constraints the compose file imposes
+        run: |
+          set -eux
+          docker run -d --name enclave-ci \
+            --read-only --tmpfs /tmp:size=256m,mode=1777 \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            -v enclave-ci-data:/data \
+            -p 127.0.0.1:8080:8080 \
+            enclave:ci
+
+          # The image's own health check has to come good on its own.
+          for _ in $(seq 1 30); do
+            if docker exec enclave-ci /usr/local/bin/enclave healthcheck; then break; fi
+            sleep 1
+          done
+          docker exec enclave-ci /usr/local/bin/enclave healthcheck
+
+          curl -fsS http://127.0.0.1:8080/healthz
+
+          # A real piece of work, not just a page load: create an enclave,
+          # import a STIG checklist, and read a rule back out of it. This is
+          # what proves the read-only root filesystem and the tmpfs are
+          # enough for an upload to be parsed.
+          curl -fsS -o /dev/null -X POST http://127.0.0.1:8080/enclaves/new \
+            -d 'name=CI&id=CI&environment=Production&status=Active'
+          curl -fsS -o /dev/null -F 'file=@testdata/sample.ckl' \
+            -F 'enclave_id=CI' -F 'create_assets=on' \
+            http://127.0.0.1:8080/import
+          curl -fsS http://127.0.0.1:8080/enclaves/CI/findings | grep -q 'V-254238'
+
+          # And that an operator can get a backup out of a running instance.
+          docker exec enclave-ci /usr/local/bin/enclave backup -o /data/ci.zip
+
+      - name: The health check fails when there is nothing to answer
+        run: |
+          docker stop enclave-ci
+          docker rm -f enclave-ci
+          docker volume rm -f enclave-ci-data
+          if docker run --rm --network none enclave:ci healthcheck --timeout 2s; then
+            echo "healthcheck passed with nothing listening" >&2
+            exit 1
+          fi
+
+      - name: The compose file comes up, proxy and all
+        run: |
+          set -eux
+          docker compose config >/dev/null
+
+          # The proxy is meant to refuse to start without any accounts, so
+          # give it one before asking it to run.
+          hash="$(docker run --rm caddy:2-alpine caddy hash-password --plaintext 'ci-password')"
+          printf 'basic_auth {\n\tci %s\n}\n' "$hash" > deploy/auth/users.conf
+
+          ENCLAVE_IMAGE=enclave:ci docker compose --profile tls up -d --wait
+
+          # No password, no entry.
+          code="$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/healthz)"
+          test "$code" = "401"
+
+          # With one, straight through to ENCLAVE.
+          curl -fsSk -u ci:ci-password https://localhost/healthz
+
+          # And plain HTTP is redirected rather than served.
+          code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)"
+          test "$code" = "301"
+
+      - name: Logs, whatever happened
+        if: always()
+        run: docker compose --profile tls logs --no-color || true
+
+      - name: Stop
+        if: always()
+        run: docker compose --profile tls down -v --remove-orphans || true

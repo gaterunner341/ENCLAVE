@@ -1,0 +1,140 @@
+# ENCLAVE on a server.
+#
+#   docker compose up -d --build        start it
+#   docker compose logs -f enclave      watch it
+#   docker compose down                 stop it (the data volume survives)
+#
+# Out of the box this publishes only to the host's own loopback address, so
+# nothing is reachable from the network until you decide how it should be.
+# ENCLAVE has no accounts and no login of its own: anyone who can reach the
+# port can change the risk register. Pick one of these before you open it up.
+#
+#   1. Keep ENCLAVE_BIND=127.0.0.1 and reach it over SSH:
+#        ssh -L 8080:127.0.0.1:8080 you@server
+#   2. Front it with the reverse proxy your organisation already runs, and
+#      authenticate there. See docs/deploying.md for the headers it needs.
+#   3. Use the bundled proxy, which terminates TLS and asks for a password:
+#        docker compose --profile tls up -d
+#
+# Settings live in a .env file beside this one; copy env.example to .env and
+# edit. Nothing in .env is required — the defaults below all work.
+
+name: enclave
+
+services:
+  enclave:
+    build:
+      context: .
+      target: runtime
+      args:
+        VERSION: ${ENCLAVE_VERSION:-docker}
+    image: ${ENCLAVE_IMAGE:-enclave:latest}
+    container_name: enclave
+    restart: unless-stopped
+
+    environment:
+      # Inside the container ENCLAVE has to bind every interface; what the
+      # host publishes is decided by "ports" below.
+      ENCLAVE_ADDR: 0.0.0.0:8080
+      ENCLAVE_DATA: /data
+      # "on" serves the interface without allowing any change, which is what
+      # you want for an instance an auditor or a programme office reads.
+      ENCLAVE_READ_ONLY: ${ENCLAVE_READ_ONLY:-off}
+      # Timestamps are written in this zone. Leave it UTC unless a report has
+      # to read in local time.
+      TZ: ${TZ:-UTC}
+
+    # Optional, and only needed if you would rather keep connector API keys
+    # out of the data volume. See docs/deploying.md.
+    env_file:
+      - path: ./enclave.env
+        required: false
+
+    # host:container. ENCLAVE_BIND defaults to the loopback deliberately: set
+    # it to 0.0.0.0 only once something in front of it authenticates.
+    ports:
+      - "${ENCLAVE_BIND:-127.0.0.1}:${ENCLAVE_PORT:-8080}:8080"
+
+    volumes:
+      # Everything ENCLAVE knows lives here: enclaves, assets, findings,
+      # catalogues, mappings and connector credentials.
+      - enclave-data:/data
+      # Somewhere to put the CA certificate of a Security Center that is
+      # signed by your own PKI. Reference it as /certs/<file> on the
+      # connector. Read-only, because ENCLAVE never writes to it.
+      - ./deploy/certs:/certs:ro
+
+    # The root filesystem is read-only; the only writable places are the data
+    # volume and a small tmpfs for the temporary files a large scan upload
+    # spills to.
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/enclave", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # Without this an instance that logs steadily will fill the disk and take
+    # the records down with it.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # TLS and a password in front of ENCLAVE. Opt in with:
+  #   docker compose --profile tls up -d
+  # It will not start until deploy/auth/users.conf exists, because an instance
+  # open to the network with no password is worse than one that failed to
+  # start. Copy deploy/auth/users.conf.example and follow the comment in it;
+  # docs/deploying.md has the one command that generates a password hash.
+  proxy:
+    image: ${PROXY_IMAGE:-caddy:2-alpine}
+    container_name: enclave-proxy
+    profiles: ["tls"]
+    restart: unless-stopped
+    depends_on:
+      enclave:
+        condition: service_healthy
+    ports:
+      - "${PROXY_HTTP_PORT:-80}:80"
+      - "${PROXY_HTTPS_PORT:-443}:443"
+    environment:
+      # The name people will type. It has to match the certificate, and it is
+      # what the proxy answers on.
+      ENCLAVE_HOSTNAME: ${ENCLAVE_HOSTNAME:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Who may log in. The password hashes are kept in a file rather than in
+      # an environment variable so they stay out of "docker inspect" — and
+      # because a bcrypt hash is full of dollar signs, which a compose file
+      # would try to expand.
+      - ./deploy/auth:/etc/caddy/auth:ro
+      # Your own certificate and key, if you are not using the self-signed one
+      # the proxy issues by default. See deploy/Caddyfile.
+      - ./deploy/certs:/etc/caddy/certs:ro
+      - proxy-data:/data
+      - proxy-config:/config
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  # Back this up. "docker compose exec enclave /usr/local/bin/enclave backup
+  # -o /data/backups/enclave.zip" writes a single file inside the volume.
+  enclave-data:
+  proxy-data:
+  proxy-config:

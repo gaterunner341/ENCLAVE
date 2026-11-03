@@ -4,6 +4,11 @@ Everything ENCLAVE knows sits in one folder of plain files. There is no database
 engine, no service and no hidden state, which is what makes moving it between
 versions a matter of copying rather than migrating.
 
+In a container deployment that folder is the `enclave-data` volume, mounted at
+`/data`. Everything here applies unchanged;
+[docs/deploying.md](deploying.md) has the commands for getting a backup in and
+out of a volume.
+
 ## What is in it
 
 ```

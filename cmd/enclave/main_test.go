@@ -387,3 +387,97 @@ func TestTenableCommandNamesTheConnectorWhenThereAreSeveral(t *testing.T) {
 		t.Errorf("an unknown connector should be named in the error: %v", err)
 	}
 }
+
+// A container is configured by its environment, not by its command line, so
+// the environment has to produce the same server a flag does — and a flag has
+// to keep winning when both are present.
+func TestServeOptionsComeFromTheEnvironment(t *testing.T) {
+	t.Setenv("ENCLAVE_ADDR", "0.0.0.0:9191")
+	if got := envOr("ENCLAVE_ADDR", "127.0.0.1:8080"); got != "0.0.0.0:9191" {
+		t.Errorf("ENCLAVE_ADDR should be used, got %q", got)
+	}
+	t.Setenv("ENCLAVE_ADDR", "   ")
+	if got := envOr("ENCLAVE_ADDR", "127.0.0.1:8080"); got != "127.0.0.1:8080" {
+		t.Errorf("a blank value should fall back to the default, got %q", got)
+	}
+
+	for raw, want := range map[string]bool{
+		"1": true, "true": true, "TRUE": true, "yes": true, "on": true, " on ": true,
+		"0": false, "false": false, "no": false, "off": false, "": false,
+	} {
+		t.Setenv("ENCLAVE_READ_ONLY", raw)
+		if got := envBool("ENCLAVE_READ_ONLY"); got != want {
+			t.Errorf("envBool(%q) = %v, want %v", raw, got, want)
+		}
+	}
+
+	// A misspelled switch reads as off, which is the wrong answer to be quiet
+	// about: it leaves an instance writable that was meant to be locked.
+	t.Setenv("ENCLAVE_READ_ONLY", "ture")
+	stderr := captureStderr(t, func() {
+		if envBool("ENCLAVE_READ_ONLY") {
+			t.Error("an unrecognised value should not be read as on")
+		}
+	})
+	if !strings.Contains(stderr, "ENCLAVE_READ_ONLY") || !strings.Contains(stderr, "ture") {
+		t.Errorf("an unrecognised value should be reported, got %q", stderr)
+	}
+}
+
+// The container image uses the binary as its own health check, so the address
+// it was told to listen on has to be turned into one that can be dialled.
+func TestHealthcheckDialsSomethingReachable(t *testing.T) {
+	for listen, want := range map[string]string{
+		"0.0.0.0:8080":   "127.0.0.1:8080",
+		"[::]:8080":      "127.0.0.1:8080",
+		":8080":          "127.0.0.1:8080",
+		"127.0.0.1:9000": "127.0.0.1:9000",
+		"10.0.0.5:8080":  "10.0.0.5:8080",
+		" 0.0.0.0:8080 ": "127.0.0.1:8080",
+	} {
+		got, err := probeAddr(listen)
+		if err != nil {
+			t.Errorf("probeAddr(%q): %v", listen, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("probeAddr(%q) = %q, want %q", listen, got, want)
+		}
+	}
+	if _, err := probeAddr("not-an-address"); err == nil {
+		t.Error("an address with no port should be rejected")
+	}
+}
+
+// The health check has to fail when nothing answers. A check that passes
+// against a dead instance is worse than none, because the orchestrator stops
+// restarting it.
+func TestHealthcheckFailsWhenNothingAnswers(t *testing.T) {
+	err := cmdHealthcheck([]string{"--addr", "127.0.0.1:1", "--timeout", "500ms"})
+	if err == nil {
+		t.Fatal("a port with nothing on it should be an error")
+	}
+	if !strings.Contains(err.Error(), "did not answer") {
+		t.Errorf("the error should say the instance did not answer: %v", err)
+	}
+}
+
+// captureStderr collects what a function wrote to the process's standard
+// error, which is where configuration complaints go.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prev := os.Stderr
+	os.Stderr = w
+	fn()
+	os.Stderr = prev
+	_ = w.Close()
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}

@@ -13,7 +13,10 @@ Every push to the repository also builds one, available under that run's
 artifacts on the Actions tab. Tagged releases carry builds for Windows, macOS
 and Linux with a `SHA256SUMS.txt`.
 
-Building it yourself takes one command and is covered further down.
+Building it yourself takes one command and is covered further down. To run it
+on a server for a team rather than on your own machine, skip to *Hosting it
+for a team* near the end, or go straight to
+[docs/deploying.md](docs/deploying.md).
 
 ## Running the executable
 
@@ -171,8 +174,15 @@ enclave export baseline  --enclave CORE > baseline.csv
 enclave export assets    > assets.csv
 enclave export risks     > poam.csv
 
+enclave healthcheck                         exit 0 if a running instance answers
 enclave version
 ```
+
+Every serve option can come from the environment instead, which is how a
+container or a systemd unit configures a process: `ENCLAVE_ADDR`,
+`ENCLAVE_DATA`, `ENCLAVE_READ_ONLY`, `ENCLAVE_NO_BROWSER`. A flag on the
+command line wins over the environment. A value for `ENCLAVE_READ_ONLY` that
+is neither a yes nor a no is reported on stderr rather than guessed at.
 
 There is also a read-only JSON API on the running server, at `/api/enclaves`,
 `/api/assets`, `/api/findings`, `/api/risks`, `/api/scans`, `/api/catalogs` and
@@ -303,3 +313,38 @@ ssh -L 8080:127.0.0.1:8080 you@the-server
 
 `--read-only` stops every change through the interface. It is a safety catch for
 publishing results, not an access control.
+
+---
+
+## Hosting it for a team
+
+Everything above is one person running a binary. For an instance several people
+use, there is a Docker setup in the repository:
+
+```
+cp env.example .env           # optional; every default works
+docker compose up -d --build
+```
+
+It publishes on the server's own `127.0.0.1:8080` and nowhere else, so you
+reach it over a tunnel until you have decided what goes in front of it. The
+same problem applies as above and more sharply, because now it is a service
+rather than something on your desk: ENCLAVE has no login, so a reverse proxy
+has to do that job. The compose file bundles one — TLS and a password, started
+with `docker compose --profile tls up -d` — for teams that would rather not
+wait on infrastructure.
+
+Useful afterwards:
+
+```
+docker compose logs -f enclave                  what it is doing
+docker compose ps                               including whether it is healthy
+docker compose exec enclave /usr/local/bin/enclave backup -o /data/backup.zip
+docker compose cp enclave:/data/backup.zip .
+docker compose down                             stop; the data volume survives
+```
+
+**[docs/deploying.md](docs/deploying.md)** is the whole guide: the three ways
+to front it, every setting, backups and restores, upgrades, where connector
+API keys should live, how to run a read-only instance for an auditor beside a
+writable one, and what the compose file already does about hardening.

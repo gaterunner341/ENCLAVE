@@ -1,0 +1,34 @@
+# Keep the build context to source. Everything here either does not belong in
+# an image or would invalidate the build cache on every change.
+
+.git/
+.github/
+
+# The published Windows build. 10 MB that the Linux image has no use for.
+ENCLAVE.exe
+/enclave
+/enclave.exe
+/dist/
+
+# Never let an operational data set, a credential, or a certificate into an
+# image layer. Layers are not secret: anything copied in can be read back out
+# of the image by anyone who can pull it.
+/enclave-data/
+*.enclavedb
+.env
+enclave.env
+deploy/auth/users.conf
+deploy/certs/*
+!deploy/certs/README.md
+
+# Not needed to compile.
+docs/
+README.md
+RUN.md
+*.md
+
+# Editor and OS noise.
+.DS_Store
+*.swp
+.idea/
+.vscode/

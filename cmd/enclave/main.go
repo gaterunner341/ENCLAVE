@@ -6,7 +6,13 @@
 //	enclave import --enclave CORE f.ckl  import without the browser
 //	enclave export findings              write CSV to stdout
 //	enclave enclave add --id CORE ...    create an enclave
+//	enclave healthcheck                  probe a running instance and exit 0 or 1
 //	enclave version
+//
+// Every serve option can also come from the environment, because a container
+// or a unit file configures a process that way rather than by rewriting its
+// command line: ENCLAVE_ADDR, ENCLAVE_DATA, ENCLAVE_READ_ONLY,
+// ENCLAVE_NO_BROWSER.
 package main
 
 import (
@@ -29,6 +35,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	// A container image built from scratch carries no zone database, so TZ
+	// would be ignored and every timestamp would read as UTC without saying
+	// so. Embedding the table costs about 450 KB and makes TZ work anywhere.
+	_ "time/tzdata"
 
 	"github.com/gaterunner341/enclave/internal/backup"
 	"github.com/gaterunner341/enclave/internal/catalog"
@@ -78,6 +89,8 @@ func run(args []string) error {
 		return cmdRestore(args)
 	case "tenable":
 		return cmdTenable(args)
+	case "healthcheck":
+		return cmdHealthcheck(args)
 	case "version", "--version", "-v":
 		fmt.Fprintln(stdout, "ENCLAVE "+version)
 		return nil
@@ -103,11 +116,16 @@ func usage() {
   enclave backup [-o FILE]                    write everything to one file
   enclave restore FILE                        replace everything from one file
   enclave tenable test|list|import|sync       pull scans from a Security Center
+  enclave healthcheck [--addr HOST:PORT]      probe a running instance; exit 0 if healthy
   enclave version
 
 The data directory defaults to "enclave-data" beside the executable. Copy that
 folder to back everything up, or use the backup and restore commands to move it
 into a new version. Delete it to start over.
+
+Serve options also read the environment, which is how a container or a unit
+file is configured: ENCLAVE_ADDR, ENCLAVE_DATA, ENCLAVE_READ_ONLY and
+ENCLAVE_NO_BROWSER. A command-line flag wins over the environment.
 `)
 }
 
@@ -146,10 +164,14 @@ func open(dir string) (*store.Store, *catalog.Registry, *mapping.Registry, error
 
 func cmdServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	addr := fs.String("addr", "127.0.0.1:8080", "address to listen on")
+	// The defaults come from the environment so that a container or a unit
+	// file can configure the process the way those things configure a process.
+	// A flag still wins, because the flag package only applies a default when
+	// the flag is absent.
+	addr := fs.String("addr", envOr("ENCLAVE_ADDR", "127.0.0.1:8080"), "address to listen on")
 	dir := fs.String("data", "", "data directory")
-	readOnly := fs.Bool("read-only", false, "serve without allowing any change")
-	noBrowser := fs.Bool("no-browser", false, "do not open a browser on start")
+	readOnly := fs.Bool("read-only", envBool("ENCLAVE_READ_ONLY"), "serve without allowing any change")
+	noBrowser := fs.Bool("no-browser", envBool("ENCLAVE_NO_BROWSER"), "do not open a browser on start")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -195,6 +217,13 @@ func cmdServe(args []string) error {
 		fmt.Println("  WARNING: this address is reachable from other machines and ENCLAVE has no")
 		fmt.Println("  authentication of its own. Put it behind something that does, or bind to")
 		fmt.Println("  127.0.0.1 and reach it over a tunnel.")
+		if inContainer() {
+			// Binding every interface is the only thing that works inside a
+			// container, so the warning would be noise without saying where
+			// the authentication is supposed to come from in that case.
+			fmt.Println("  In a container this binding is correct; the proxy in front of it is what")
+			fmt.Println("  has to authenticate. See docs/deploying.md.")
+		}
 	}
 	fmt.Println()
 	fmt.Println("Press Ctrl+C to stop.")
@@ -254,6 +283,93 @@ func isLoopback(addr string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// envOr reads a setting from the environment, falling back to a default. It
+// exists so that the same options can be given as flags on a command line or
+// as variables in a compose file, without two code paths.
+func envOr(name, def string) string {
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		return v
+	}
+	return def
+}
+
+// envBool reads a switch from the environment. An unrecognised value is not
+// quietly taken as off: a misspelled ENCLAVE_READ_ONLY that leaves an instance
+// writable is exactly the kind of thing nobody notices until it matters.
+func envBool(name string) bool {
+	raw := strings.TrimSpace(os.Getenv(name))
+	switch strings.ToLower(raw) {
+	case "":
+		return false
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	}
+	fmt.Fprintf(os.Stderr, "enclave: %s=%q is not a yes or a no, so it is being read as off\n", name, raw)
+	return false
+}
+
+// inContainer reports whether this looks like a containerised process. It only
+// changes the wording of a warning, so a wrong answer costs nothing.
+func inContainer() bool {
+	if envBool("ENCLAVE_IN_CONTAINER") {
+		return true
+	}
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	if b, err := os.ReadFile("/proc/1/cgroup"); err == nil {
+		s := string(b)
+		return strings.Contains(s, "docker") || strings.Contains(s, "containerd") ||
+			strings.Contains(s, "kubepods")
+	}
+	return false
+}
+
+// cmdHealthcheck probes a running instance and exits 0 only if it answered.
+// The container image carries no shell and no curl on purpose, so the health
+// check has to be the binary itself.
+func cmdHealthcheck(args []string) error {
+	fs := flag.NewFlagSet("healthcheck", flag.ContinueOnError)
+	addr := fs.String("addr", envOr("ENCLAVE_ADDR", "127.0.0.1:8080"), "address the instance is serving on")
+	timeout := fs.Duration("timeout", 5*time.Second, "how long to wait for an answer")
+	if _, err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	target, err := probeAddr(*addr)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: *timeout}
+	resp, err := client.Get("http://" + target + "/healthz")
+	if err != nil {
+		return fmt.Errorf("%s did not answer: %w", target, err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<10))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s answered %s", target, resp.Status)
+	}
+	fmt.Fprintln(stdout, "ok")
+	return nil
+}
+
+// probeAddr turns a listen address into one that can be dialled. An instance
+// told to bind every interface reports 0.0.0.0, which is not somewhere to
+// connect to, so the port is kept and the host becomes the loopback.
+func probeAddr(listen string) (string, error) {
+	host, port, err := net.SplitHostPort(strings.TrimSpace(listen))
+	if err != nil {
+		return "", fmt.Errorf("address %q is not host:port: %w", listen, err)
+	}
+	switch host {
+	case "", "0.0.0.0", "::", "*":
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, port), nil
 }
 
 func openBrowser(url string) {

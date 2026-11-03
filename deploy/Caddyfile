@@ -1,0 +1,71 @@
+# The proxy that puts TLS and a password in front of ENCLAVE.
+#
+# It is only used when you start the "tls" profile:
+#   docker compose --profile tls up -d
+#
+# ENCLAVE has no accounts of its own. Everything that decides who gets in is
+# in this file, so it is worth reading before you rely on it.
+
+{
+	# Nothing here needs the admin API, and it is one less thing listening.
+	admin off
+
+	# For a publicly resolvable name and a publicly trusted certificate,
+	# uncomment this and remove the "tls internal" line below. Caddy will then
+	# get a certificate from Let's Encrypt, which needs outbound 443 and
+	# inbound 80 to work.
+	# email security@example.gov
+}
+
+{$ENCLAVE_HOSTNAME}:443 {
+	# A certificate from Caddy's own local authority. This needs no internet
+	# access, which is the point: it works on a closed network on the first
+	# try. Browsers will warn until the root is trusted, and the root is at
+	# /data/caddy/pki/authorities/local/root.crt inside the proxy-data volume:
+	#   docker compose cp proxy:/data/caddy/pki/authorities/local/root.crt .
+	tls internal
+
+	# Your own PKI instead — which is what most organisations will want. Put
+	# the files in deploy/certs, delete the "tls internal" line above, and
+	# uncomment this one:
+	# tls /etc/caddy/certs/enclave.crt /etc/caddy/certs/enclave.key
+
+	# Who may log in. The proxy refuses to start if this file is missing,
+	# which is deliberate: there is no accidental path to an unauthenticated
+	# instance. Copy deploy/auth/users.conf.example to users.conf.
+	import /etc/caddy/auth/users.conf
+
+	# Scan exports are large. This has to be at least as big as the files you
+	# intend to upload, and ENCLAVE itself accepts up to 128 MB per file.
+	request_body {
+		max_size 256MB
+	}
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	reverse_proxy enclave:8080 {
+		header_up X-Forwarded-Proto {scheme}
+
+		# A big import can take a while to come back.
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+# Anything arriving on plain HTTP is sent to HTTPS. Nothing is served in the
+# clear, including the sign-in that would otherwise carry the password.
+http://{$ENCLAVE_HOSTNAME} {
+	redir https://{host}{uri} permanent
+}
