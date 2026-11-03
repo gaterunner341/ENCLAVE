@@ -1,7 +1,9 @@
 # ENCLAVE as a YAML app.
 #
-# Paste this in and start it. Change one line: the directory on the left of
-# ":/data". Nothing has to be created or chowned first — the container takes
+# Paste this in and start it. One thing to change: in the "volumes" section
+# near the bottom, the path to the LEFT of ":/data" — that is a directory on
+# this machine. Leave "/data" itself alone; that is the path inside the
+# container. Nothing has to be created or chowned first — the container takes
 # ownership of that directory itself and then drops to an unprivileged user,
 # so the server never runs as root.
 #
@@ -38,16 +40,30 @@ services:
       - "8080:8080"
 
     volumes:
-      # CHANGE THIS. Everything ENCLAVE knows lives here: enclaves, assets,
-      # findings, scans, catalogues, mappings, the people directory and
-      # connector credentials. Pointing it at a real directory rather than a
-      # Docker volume is what lets you snapshot and replicate it with
-      # everything else on the machine.
+      # Change the LEFT side only. The right side is the path inside the
+      # container and must stay exactly "/data".
+      #
+      #     /mnt/tank/apps/enclave  :  /data
+      #     \_______ your path ____/     \_ leave alone
+      #
+      # The left side is a directory on this machine. On TrueNAS that is
+      # /mnt/<your pool>/<whatever you call it> — "tank" below is a
+      # placeholder for your own pool name, which Storage shows you. Make a
+      # dataset for it if you want to snapshot it on its own; otherwise any
+      # path under your pool will do and it will be created if missing.
+      #
+      # Everything ENCLAVE knows ends up there: enclaves, assets, findings,
+      # scans, catalogues, mappings, the people directory and connector
+      # credentials. Keeping it on a real directory rather than in a Docker
+      # volume is what lets you snapshot and replicate it with everything
+      # else on the machine.
       - /mnt/tank/apps/enclave:/data
 
-      # Optional. A CA certificate for a Tenable Security Center signed by
-      # your own PKI goes in a second directory, referenced on the connector
-      # as /certs/<filename>. Delete if you are not pulling from one.
+      # Optional, and the same rule: change the left side, leave "/certs".
+      # A CA certificate for a Tenable Security Center signed by your own PKI
+      # goes in that directory and is referenced on the connector as
+      # /certs/<filename>. Delete these lines if you are not pulling from a
+      # Security Center.
       # - /mnt/tank/apps/enclave-certs:/certs:ro
 
     # ENCLAVE writes to the data directory and nowhere else. The tmpfs is

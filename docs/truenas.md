@@ -88,6 +88,23 @@ gunzip -c enclave.tar.gz | docker load
 
 Open `http://your-host:8080`.
 
+**If the browser says `ERR_SSL_PROTOCOL_ERROR` or "can't provide a secure
+connection", the app is running** — something answered, or you would have got
+a refused connection. The browser is speaking TLS to a server that speaks
+plain HTTP.
+
+It is usually HSTS, and the trap is that **HSTS applies to a whole host, not
+to one port**. A NAS web interface on 443 sends that header, so after visiting
+it the browser forces HTTPS on every port of that address, 8080 included.
+Typing `http://` does not get around it. In Chrome, clear it at
+`chrome://net-internals/#hsts` under *Delete domain security policies*, with
+just the host (`192.168.1.120`, no port). Firefox: forget the site from
+history.
+
+It will keep happening to everyone who has visited the appliance's own
+interface, which is the practical argument for putting the TLS proxy in front
+of ENCLAVE rather than fighting browsers one at a time.
+
 **Back it up.** The data directory is plain files, so a snapshot of the dataset
 is a complete backup. For something you can hand to somebody, have ENCLAVE
 write one file:
