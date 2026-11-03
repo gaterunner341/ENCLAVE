@@ -1,75 +1,78 @@
 # How to run ENCLAVE
 
-Nothing to install. No database, no web server, no admin rights.
+ENCLAVE is a container. There is nothing to install, nothing to download and
+no admin rights to ask for: you paste a YAML file into whatever runs your
+containers, and open a browser at it.
 
 ---
 
-## Where to get it
+## Start it
 
-A current Windows build is committed at **`ENCLAVE.exe`** in the root of this
-repository. Open it on GitHub and use the download button.
-
-Every push to the repository also builds one, available under that run's
-artifacts on the Actions tab. Tagged releases carry builds for Windows, macOS
-and Linux with a `SHA256SUMS.txt`.
-
-Building it yourself takes one command and is covered further down. To run it
-on a server for a team rather than on your own machine, skip to *Hosting it
-for a team* near the end, or go straight to
-[docs/deploying.md](docs/deploying.md).
-
-## Running the executable
-
-**Windows**
-
-1. Put `ENCLAVE.exe` anywhere you like. The Desktop is fine.
-2. Double-click it.
-3. A black window appears and your browser opens at <http://127.0.0.1:8080>.
-
-Leave the black window open. Closing it stops the app.
-
-Windows may warn that it is from an unknown publisher: **More info → Run
-anyway**. That warning is because the build is unsigned, not because anything is
-wrong with it.
-
-**macOS or Linux**
-
-```
-chmod +x enclave
-./enclave
+```yaml
+services:
+  enclave:
+    image: ghcr.io/gaterunner341/enclave:latest
+    restart: unless-stopped
+    environment:
+      PUID: "568"          # the user it runs as; 568 is "apps" on TrueNAS
+      PGID: "568"
+    ports:
+      - "8080:8080"
+    volumes:
+      - /mnt/tank/apps/enclave:/data    # CHANGE THIS
 ```
 
-Then open <http://127.0.0.1:8080> if it does not open by itself.
+Change the directory on the left of `:/data` and start it. Nothing has to be
+created or chowned first — the container takes ownership of that directory
+itself and then drops to `PUID:PGID`, so the server never runs as root.
 
-On macOS, Gatekeeper may block an unsigned binary the first time. Right-click
-the file, choose **Open**, then confirm; or run
-`xattr -d com.apple.quarantine ./enclave` once.
+- **TrueNAS**: Apps, Discover Apps, the three-dot menu, Install via YAML.
+- **Portainer**: Stacks, Add stack, Web editor.
+- **Unraid**: Docker, Compose, Add stack.
+- **Anywhere else**: save it as `docker-compose.yml` and `docker compose up -d`.
+
+Then open `http://your-host:8080`.
+
+Do not use port 80 or 443 on a NAS — its own web interface is there, and the
+app will fail to start with a port conflict.
+
+The fuller file, with the hardening settings and an optional CA certificate
+mount, is [`deploy/truenas/enclave.yaml`](deploy/truenas/enclave.yaml).
+[docs/truenas.md](docs/truenas.md) explains each part, and
+[docs/deploying.md](docs/deploying.md) covers backups, upgrades, connector
+credentials and what has to sit in front of it.
+
+---
+
+## Before anyone else uses it
+
+**ENCLAVE has no accounts and no sign-in.** Anyone who can reach that port can
+read every finding and change every risk decision, and nothing records who did
+it. On a management VLAN that may be your answer. Reachable from a user
+network it is not. [docs/deploying.md](docs/deploying.md) sets out the three
+ways to put something in front of it, and the repository ships one.
+
+`ENCLAVE_READ_ONLY=on` serves the interface but refuses every change. It is a
+safety catch for publishing results, not an access control.
 
 ---
 
 ## If you have the source
 
-You need Go 1.24 or later, and nothing else.
+Go 1.24 or later, and nothing else.
 
 ```
-git clone https://github.com/gaterunner341/enclave.git
-cd enclave
+git clone https://github.com/gaterunner341/ENCLAVE.git
+cd ENCLAVE
 
-go run ./cmd/enclave              # start it straight away
+docker compose up -d --build      # build the image and run it
+go test ./...                     # the test suite
+go run ./cmd/enclave              # on 127.0.0.1:8080, for development
 ```
 
-or build a binary you can copy elsewhere:
-
-```
-go build -o enclave ./cmd/enclave
-./enclave
-```
-
-Run the tests while you are here:
-
-```
-go test ./...
-```
+`go run` is for working on ENCLAVE, not for running it: it keeps its data in
+`enclave-data` in the working directory and has none of the deployment around
+it.
 
 ---
 
@@ -147,42 +150,44 @@ the scans against them are failing.
 
 ## Command line
 
-The same binary does the parts that are better scripted than clicked.
+The same program does the parts that are better scripted than clicked. Reach
+them with `docker compose exec` — or on TrueNAS, the app's shell button.
 
 ```
-enclave                                     serve on 127.0.0.1:8080, open a browser
-enclave serve --addr 127.0.0.1:9000         a different port
-enclave serve --no-browser                  do not open a browser
-enclave serve --read-only                   publish results, allow no changes
-enclave serve --data /path/to/dir           use a different data directory
-
-enclave enclave list
-enclave enclave add --id CORE --name "Core Operations" \
+docker compose exec enclave enclave enclave list
+docker compose exec enclave enclave enclave add --id CORE --name "Core Operations" \
     --cidr 10.20.0.0/16 --baseline nist-800-53r5:moderate
 
-enclave import --enclave CORE scan.ckl results.nessus
-enclave import --enclave CORE --asset asset-2026...-0001 scan.ckl
-enclave import --enclave CORE --place-by-address estate-wide.nessus
+docker compose exec enclave enclave import --enclave CORE /data/scan.ckl
+docker compose exec enclave enclave import --enclave CORE --asset asset-2026...-0001 /data/scan.ckl
+docker compose exec enclave enclave import --enclave CORE --place-by-address /data/estate.nessus
 
-enclave backup -o enclave-backup.zip        write everything to one file
-enclave restore enclave-backup.zip --yes   replace everything from one file
+docker compose exec enclave enclave backup -o /data/enclave-backup.zip
+docker compose exec enclave enclave restore /data/enclave-backup.zip --yes
 
-enclave export enclaves  > systems.csv        with every point of contact resolved
-enclave export people    > directory.csv
-enclave export findings  --enclave CORE > findings.csv
-enclave export baseline  --enclave CORE > baseline.csv
-enclave export assets    > assets.csv
-enclave export risks     > poam.csv
+docker compose exec enclave enclave export findings --enclave CORE > findings.csv
+docker compose exec enclave enclave export enclaves > systems.csv
+docker compose exec enclave enclave export people   > directory.csv
+docker compose exec enclave enclave export baseline --enclave CORE > baseline.csv
+docker compose exec enclave enclave export assets   > assets.csv
+docker compose exec enclave enclave export risks    > poam.csv
 
-enclave healthcheck                         exit 0 if a running instance answers
-enclave version
+docker compose exec enclave enclave healthcheck
+docker compose exec enclave enclave version
 ```
 
-Every serve option can come from the environment instead, which is how a
-container or a systemd unit configures a process: `ENCLAVE_ADDR`,
-`ENCLAVE_DATA`, `ENCLAVE_READ_ONLY`, `ENCLAVE_NO_BROWSER`. A flag on the
-command line wins over the environment. A value for `ENCLAVE_READ_ONLY` that
-is neither a yes nor a no is reported on stderr rather than guessed at.
+The repetition is not a typo: the first `enclave` is the service, the second
+is the program, and for `enclave add` the third is the subcommand.
+
+A file to import has to be somewhere the container can see, which means the
+data directory — drop it in the directory you mounted at `/data` and refer to
+it as `/data/<name>`. An export goes to the terminal, so the redirection above
+writes the CSV on whichever machine you ran the command from.
+
+Serving is configured by the environment, because that is how a container is
+configured: `ENCLAVE_ADDR`, `ENCLAVE_DATA`, `ENCLAVE_READ_ONLY`, and `PUID`
+and `PGID` for the user it runs as. A value for `ENCLAVE_READ_ONLY` that is
+neither a yes nor a no is reported on stderr rather than guessed at.
 
 There is also a read-only JSON API on the running server, at `/api/enclaves`,
 `/api/assets`, `/api/findings`, `/api/risks`, `/api/scans`, `/api/catalogs` and
@@ -242,11 +247,13 @@ ones first.
 
 ## Where your data lives
 
-In a folder called `enclave-data` next to the executable.
+In the directory you mounted at `/data` — the one on the left of `:/data` in
+the YAML.
 
-- Back it up from the **Data** page, or by copying the folder.
-- Start over by deleting it.
-- Put it somewhere else with `--data DIR` or by setting `ENCLAVE_DATA`.
+- Back it up from the **Data** page, by snapshotting that directory, or with
+  `enclave backup`.
+- Start over by emptying it.
+- Move it by pointing the YAML somewhere else.
 
 Inside are plain JSON files, plus `catalogs/` and `mappings/` for anything you
 imported. You can read them, diff them, and put them in version control.
@@ -255,29 +262,28 @@ imported. You can read them, diff them, and put them in version control.
 
 ## Upgrading to a new version
 
-Three steps, and none of them involve finding a folder.
-
-1. In the version you are running now, open **Data** and click
-   **Download a backup**. One file, everything in it.
-2. Put the new build wherever you want it and start it.
-3. Open its **Data** page, upload the file, type `REPLACE`, and restore.
-
-That carries your enclaves, assets, findings, imports, control assessments and
-risk entries, along with any control catalogues and mapping tables you loaded.
-
-From a terminal it is the same two steps:
+Pull the new image and recreate the app. The data directory stays where it is.
 
 ```
-old-enclave backup -o enclave-backup.zip
-new-enclave restore enclave-backup.zip
+docker compose pull
+docker compose up -d --force-recreate
 ```
 
-Restoring over an install that already has data asks first; add `--yes` when
-you mean it. Whatever was there is written to `enclave-data/backups/` before
-anything is replaced, so a restore into the wrong instance can be undone.
+On TrueNAS or Portainer that is the app's update or re-pull button.
 
-**Copying the whole `enclave-data` folder to the new location works too**, and
-always has. The backup file exists so you do not have to know that.
+Take a backup first — **Data**, **Download a backup**, or
+`enclave backup -o /data/enclave-backup.zip` — because it costs one command
+and a snapshot of the directory is not atomic while the app is running.
+
+Moving to a different machine is the same backup file: restore it on the new
+instance from its **Data** page, or with
+`enclave restore /data/enclave-backup.zip`. Restoring over an instance that
+already has data asks first; add `--yes` when you mean it, and whatever was
+there is written to `backups/` inside the data directory first, so a restore
+into the wrong instance can be undone.
+
+**Copying the whole data directory works too**, and always has. The backup
+file exists so you do not have to know that.
 
 ### What the version stamp does
 
@@ -294,57 +300,28 @@ backup taken with the version you are running.
 
 ## Stopping it
 
-Close the black window, or press **Ctrl+C** in the terminal.
+```
+docker compose down
+```
+
+The data directory survives; it is outside the container. On TrueNAS or
+Portainer, the app's stop button does the same thing.
 
 ---
 
-## Before you put it on a shared machine
+## Running it for a team
 
-**ENCLAVE has no login of its own.** It binds to `127.0.0.1` for that reason, so
-by default only the machine it runs on can reach it.
+Everything about putting it where several people can reach it —  what has to
+sit in front of it, TLS and a password, settings, backups, connector
+credentials, hardening — is in **[docs/deploying.md](docs/deploying.md)**.
+**[docs/truenas.md](docs/truenas.md)** is the shorter one for an appliance
+that takes a pasted YAML file.
 
-If you bind it to anything else it prints a warning, and it is only safe behind
-something that authenticates on its behalf — a reverse proxy your organisation
-already runs, or an SSH tunnel:
-
-```
-ssh -L 8080:127.0.0.1:8080 you@the-server
-```
-
-`--read-only` stops every change through the interface. It is a safety catch for
-publishing results, not an access control.
-
----
-
-## Hosting it for a team
-
-Everything above is one person running a binary. For an instance several people
-use, there is a Docker setup in the repository:
-
-```
-cp env.example .env           # optional; every default works
-docker compose up -d --build
-```
-
-It publishes on the server's own `127.0.0.1:8080` and nowhere else, so you
-reach it over a tunnel until you have decided what goes in front of it. The
-same problem applies as above and more sharply, because now it is a service
-rather than something on your desk: ENCLAVE has no login, so a reverse proxy
-has to do that job. The compose file bundles one — TLS and a password, started
-with `docker compose --profile tls up -d` — for teams that would rather not
-wait on infrastructure.
-
-Useful afterwards:
+Day to day:
 
 ```
 docker compose logs -f enclave                  what it is doing
 docker compose ps                               including whether it is healthy
-docker compose exec enclave /usr/local/bin/enclave backup -o /data/backup.zip
+docker compose exec enclave enclave backup -o /data/backup.zip
 docker compose cp enclave:/data/backup.zip .
-docker compose down                             stop; the data volume survives
 ```
-
-**[docs/deploying.md](docs/deploying.md)** is the whole guide: the three ways
-to front it, every setting, backups and restores, upgrades, where connector
-API keys should live, how to run a read-only instance for an auditor beside a
-writable one, and what the compose file already does about hardening.

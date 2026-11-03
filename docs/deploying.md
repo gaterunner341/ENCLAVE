@@ -93,10 +93,15 @@ file. `env.example` is the full list; these are the ones that matter.
 | `ENCLAVE_VERSION` | `docker` | Stamped into the binary and shown in the footer, so a screenshot in a report says which build produced it. Pass a git SHA or a release tag. |
 | `ENCLAVE_HOSTNAME` | `localhost` | `tls` profile only: the name people type, which has to match the certificate. |
 
-The same variables work outside Docker — the binary reads `ENCLAVE_ADDR`,
-`ENCLAVE_DATA`, `ENCLAVE_READ_ONLY` and `ENCLAVE_NO_BROWSER` from the
-environment, so a systemd unit configures it the same way. A command-line
-flag still wins over the environment.
+`PUID` and `PGID` choose the user the server runs as, and the user the data
+directory ends up owned by. They default to `65532`. Nothing has to be
+prepared beforehand either way: the container takes ownership of the directory
+and then drops to that user, so the process answering requests is never root.
+
+Setting `user:` on the service skips that entirely, for a deployment that
+would rather no root process started at all. Then the directory has to be
+owned correctly first, and if it is not, the error says which `chown` fixes
+it.
 
 A note on `ENCLAVE_READ_ONLY`: a value that is neither a yes nor a no is
 reported on stderr and read as off, rather than being guessed at. A

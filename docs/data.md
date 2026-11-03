@@ -32,7 +32,7 @@ All of it is JSON you can read, diff and put in version control. `catalogs/`
 holds the frameworks in whatever format you loaded them in. `backups/` is
 excluded from backups, so bundles never nest.
 
-The folder defaults to `enclave-data` beside the executable. `--data DIR` and
+The folder is whatever is mounted at `/data`. `--data DIR` and
 the `ENCLAVE_DATA` environment variable override it.
 
 ## Backups

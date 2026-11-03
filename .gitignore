@@ -1,7 +1,8 @@
-# Local build output. The Windows build published for download is committed
-# deliberately as ENCLAVE.exe in the repository root, so it is not listed here.
+# Build output. ENCLAVE ships as a container image, so no binary belongs in
+# the repository.
 /enclave
 /enclave.exe
+/ENCLAVE.exe
 /dist/
 
 # runtime data directory (never commit an operational data set)

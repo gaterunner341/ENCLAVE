@@ -1,7 +1,8 @@
 // Command enclave runs the ENCLAVE interface, and the handful of operations
-// that are better done from a shell than a browser.
+// that are better done from a shell than a browser. It is the process inside
+// the container image; the operations are reached with "docker exec".
 //
-//	enclave                              serve on 127.0.0.1:8080
+//	enclave serve                        serve on ENCLAVE_ADDR, or 127.0.0.1:8080
 //	enclave serve --addr 0.0.0.0:8080    serve on every interface
 //	enclave import --enclave CORE f.ckl  import without the browser
 //	enclave export findings              write CSV to stdout
@@ -10,9 +11,8 @@
 //	enclave version
 //
 // Every serve option can also come from the environment, because a container
-// or a unit file configures a process that way rather than by rewriting its
-// command line: ENCLAVE_ADDR, ENCLAVE_DATA, ENCLAVE_READ_ONLY,
-// ENCLAVE_NO_BROWSER.
+// configures a process that way rather than by rewriting its command line:
+// ENCLAVE_ADDR, ENCLAVE_DATA, ENCLAVE_READ_ONLY.
 package main
 
 import (
@@ -27,10 +27,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -106,8 +104,8 @@ func run(args []string) error {
 func usage() {
 	fmt.Fprint(os.Stderr, `ENCLAVE — track risk and control baseline gaps across the systems you own.
 
-  enclave                                     serve on 127.0.0.1:8080 and open a browser
-  enclave serve [--addr HOST:PORT] [--data DIR] [--read-only] [--no-browser]
+  enclave                                     serve on 127.0.0.1:8080
+  enclave serve [--addr HOST:PORT] [--data DIR] [--read-only]
   enclave import --enclave ID [--asset ID] FILE...
                                               load scan results without the browser
   enclave export KIND [--enclave ID]          write assets, findings, baseline or risks as CSV
@@ -119,18 +117,18 @@ func usage() {
   enclave healthcheck [--addr HOST:PORT]      probe a running instance; exit 0 if healthy
   enclave version
 
-The data directory defaults to "enclave-data" beside the executable. Copy that
-folder to back everything up, or use the backup and restore commands to move it
-into a new version. Delete it to start over.
+The data directory is whatever ENCLAVE_DATA names, which in the container
+image is /data. Copy that directory to back everything up, or use the backup
+and restore commands to move it into a new version. Empty it to start over.
 
-Serve options also read the environment, which is how a container or a unit
-file is configured: ENCLAVE_ADDR, ENCLAVE_DATA, ENCLAVE_READ_ONLY and
-ENCLAVE_NO_BROWSER. A command-line flag wins over the environment.
+Serve options also read the environment, which is how a container is
+configured: ENCLAVE_ADDR, ENCLAVE_DATA and ENCLAVE_READ_ONLY. A command-line
+flag wins over the environment.
 `)
 }
 
-// dataDir resolves where records are kept. Beside the executable is the right
-// default for a tool that is copied onto a system and run in place.
+// dataDir resolves where records are kept. The container image sets
+// ENCLAVE_DATA; the fallback beside the binary is for running from source.
 func dataDir(flagValue string) (string, error) {
 	if flagValue != "" {
 		return filepath.Abs(flagValue)
@@ -171,7 +169,6 @@ func cmdServe(args []string) error {
 	addr := fs.String("addr", envOr("ENCLAVE_ADDR", "127.0.0.1:8080"), "address to listen on")
 	dir := fs.String("data", "", "data directory")
 	readOnly := fs.Bool("read-only", envBool("ENCLAVE_READ_ONLY"), "serve without allowing any change")
-	noBrowser := fs.Bool("no-browser", envBool("ENCLAVE_NO_BROWSER"), "do not open a browser on start")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -227,10 +224,6 @@ func cmdServe(args []string) error {
 	}
 	fmt.Println()
 	fmt.Println("Press Ctrl+C to stop.")
-
-	if !*noBrowser && isLoopback(*addr) {
-		go openBrowser(url)
-	}
 
 	httpSrv := &http.Server{
 		Handler:           srv.Handler(),
@@ -370,20 +363,6 @@ func probeAddr(listen string) (string, error) {
 		host = "127.0.0.1"
 	}
 	return net.JoinHostPort(host, port), nil
-}
-
-func openBrowser(url string) {
-	time.Sleep(300 * time.Millisecond)
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	default:
-		cmd = exec.Command("xdg-open", url)
-	}
-	_ = cmd.Start()
 }
 
 func cmdImport(args []string) error {

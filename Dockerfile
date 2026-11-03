@@ -75,7 +75,6 @@ RUN chmod 0755 /usr/local/bin/docker-entrypoint
 # the way a container is configured rather than by rewriting a command line.
 ENV ENCLAVE_DATA=/data \
     ENCLAVE_ADDR=0.0.0.0:8080 \
-    ENCLAVE_NO_BROWSER=1 \
     ENCLAVE_IN_CONTAINER=1 \
     TZ=UTC
 

@@ -1,3 +1,11 @@
+# Cuts a release. ENCLAVE ships as a container image, so a release is a tagged
+# image plus the compose file people deploy it with — there are no binaries to
+# download and nothing to install.
+#
+# The image itself is built and pushed by the Container image workflow, which
+# runs on the same tag. This one waits for it, checks the tag can actually be
+# pulled, and writes the release notes around it.
+
 name: Release
 
 on:
@@ -12,10 +20,11 @@ on:
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
   release:
-    name: Build and publish
+    name: Publish a release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,36 +47,77 @@ jobs:
           else
             echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
+          echo "image=ghcr.io/$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - name: Build every platform
+      # The Container image workflow runs on the same tag. A release that
+      # points at an image nobody can pull is worse than a late one, so wait
+      # for it rather than announce it.
+      - name: Wait for the image to be published
         env:
+          IMAGE: ${{ steps.version.outputs.image }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
+          set -eu
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for attempt in $(seq 1 60); do
+            if docker manifest inspect "${IMAGE}:${VERSION}" >/dev/null 2>&1; then
+              echo "${IMAGE}:${VERSION} is available"
+              exit 0
+            fi
+            echo "attempt ${attempt}: not published yet"
+            sleep 20
+          done
+          echo "${IMAGE}:${VERSION} never appeared" >&2
+          exit 1
+
+      # What a release consists of: the compose files somebody deploys with,
+      # pinned to this exact tag so the release is reproducible.
+      - name: Assemble the deployment files
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -eu
           mkdir -p dist
-          build() {
-            goos=$1; goarch=$2; ext=$3
-            out="dist/enclave-${goos}-${goarch}${ext}"
-            GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build -trimpath \
-              -ldflags "-s -w -X main.version=${VERSION}" -o "$out" ./cmd/enclave
-            echo "built $out"
-          }
-          build windows amd64 .exe
-          build windows arm64 .exe
-          build linux   amd64 ""
-          build linux   arm64 ""
-          build darwin  amd64 ""
-          build darwin  arm64 ""
-
-          # The Windows build is also published under the plain name people
-          # expect to be handed.
-          cp dist/enclave-windows-amd64.exe dist/ENCLAVE.exe
-
+          sed "s|${IMAGE}:latest|${IMAGE}:${VERSION}|" \
+            deploy/truenas/enclave.yaml > dist/enclave.yaml
+          cp docker-compose.yml dist/docker-compose.yml
+          cp env.example dist/env.example
+          grep -q "${VERSION}" dist/enclave.yaml
           cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Write the notes
+        id: notes
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          {
+            echo "ENCLAVE runs as a container. There is nothing to download and"
+            echo "nothing to install: paste \`enclave.yaml\` into TrueNAS, Portainer,"
+            echo "Unraid or anything else that takes a compose file, change the"
+            echo "directory on the left of \`:/data\`, and start it."
+            echo
+            echo '```'
+            echo "${IMAGE}:${VERSION}"
+            echo '```'
+            echo
+            echo "The container prepares its own data directory, so nothing has to be"
+            echo "created or chowned first."
+            echo
+            echo "See [docs/truenas.md](https://github.com/${GITHUB_REPOSITORY}/blob/${VERSION}/docs/truenas.md)"
+            echo "for the one line to change, and"
+            echo "[docs/deploying.md](https://github.com/${GITHUB_REPOSITORY}/blob/${VERSION}/docs/deploying.md)"
+            echo "for everything else."
+          } > notes.md
+          cat notes.md
 
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.value }}
           files: dist/*
+          body_path: notes.md
           generate_release_notes: true
           fail_on_unmatched_files: true

@@ -8,9 +8,9 @@ control baseline and answers the question the scanners cannot: **of the controls
 you are supposed to be meeting, which ones are you actually meeting, and how do
 you know?**
 
-It has no dependencies outside the Go standard library: no database engine, no
-service account, and no outbound connection unless you configure one. One
-container, one data directory.
+It runs as a container and nothing else: one image, one data directory, no
+database engine, no service account, and no outbound connection unless you
+configure one. There is nothing to install and nothing to download.
 
 ## Run it
 
@@ -75,9 +75,14 @@ not. [docs/deploying.md](docs/deploying.md) sets out the three ways to put
 something in front of it, and the repository ships one — a TLS-and-password
 proxy — in `docker-compose.yml` under `--profile tls`.
 
-The copy in this repository, with build-from-source, an opt-in proxy and
-settings in a `.env`, is [`docker-compose.yml`](docker-compose.yml); the
-paste-ready one above is [`deploy/truenas/enclave.yaml`](deploy/truenas/enclave.yaml).
+Nothing has to be created or chowned first: the container takes ownership of
+that directory itself and then drops to an unprivileged user, so the server
+never runs as root. `PUID`/`PGID` choose which user that is.
+
+The file above is [`deploy/truenas/enclave.yaml`](deploy/truenas/enclave.yaml).
+The copy in this repository, which builds from source and has an opt-in
+TLS-and-password proxy and settings in a `.env`, is
+[`docker-compose.yml`](docker-compose.yml):
 
 ```
 git clone https://github.com/gaterunner341/ENCLAVE.git
@@ -85,23 +90,8 @@ cd ENCLAVE
 docker compose up -d --build
 ```
 
-### Or as a single executable
-
-It is still one static binary with no installer, for a laptop or a standalone
-machine. A current Windows build sits at **[`ENCLAVE.exe`](ENCLAVE.exe)** in the
-root of this repository — download it and double-click. Tagged releases carry
-Windows, macOS and Linux builds with checksums.
-
-```
-ENCLAVE.exe                   # on Windows, or just double-click it
-./enclave                     # a built binary on macOS or Linux
-go run ./cmd/enclave          # from source
-```
-
-It serves on <http://127.0.0.1:8080>, opens a browser, and keeps its data in
-`enclave-data` beside the executable. **[RUN.md](RUN.md)** is the walkthrough
-for that: the first five minutes, every command line flag, and where the data
-lives.
+**[RUN.md](RUN.md) is the walkthrough** once it is up: the first five minutes,
+the commands you run against a running instance, and where the data lives.
 
 ## What it does
 
@@ -179,24 +169,22 @@ need a plan rather than a patch.
 ## Running it
 
 ```
-enclave                                    serve on 127.0.0.1:8080, open a browser
-enclave serve --addr 127.0.0.1:9000 --no-browser
-enclave serve --read-only                  publish results without allowing changes
-enclave enclave add --id CORE --name "Core Operations" \
+docker compose exec enclave enclave enclave list
+docker compose exec enclave enclave enclave add --id CORE --name "Core Operations" \
     --cidr 10.20.0.0/16 --baseline nist-800-53r5:moderate
-enclave import --enclave CORE scan.ckl results.nessus
-enclave export findings --enclave CORE > findings.csv
+docker compose exec enclave enclave import --enclave CORE /data/scan.ckl
+docker compose exec enclave enclave export findings --enclave CORE > findings.csv
+docker compose exec enclave enclave backup -o /data/backup.zip
 ```
 
-`--data DIR` overrides the data directory, which defaults to `enclave-data`
-beside the executable and can also be set with `ENCLAVE_DATA`. Copy that folder
-to back everything up; delete it to start over.
+Files to import are reached through the data directory, because that is the
+one place both sides can see.
 
-Every serve option also reads the environment, which is how a container or a
-systemd unit configures a process: `ENCLAVE_ADDR`, `ENCLAVE_DATA`,
-`ENCLAVE_READ_ONLY`, `ENCLAVE_NO_BROWSER`. A flag wins over the environment.
-`enclave healthcheck` probes a running instance and exits 0 or 1, which is
-what the container image uses as its own health check.
+Serving is configured by the environment, which is how a container is
+configured: `ENCLAVE_ADDR`, `ENCLAVE_DATA`, `ENCLAVE_READ_ONLY`, plus `PUID`
+and `PGID` for the user it runs as. `enclave healthcheck` probes a running
+instance and exits 0 or 1, which is what the image uses as its own health
+check.
 
 ## Getting started
 
@@ -223,7 +211,7 @@ so ENCLAVE keeps translation tables and does not invent entries: anything a
 table cannot translate is reported as unmapped rather than attributed to a
 control it might not belong to.
 
-Four small tables ship with the binary, including a starter subset of the CCI
+Four small tables ship with the image, including a starter subset of the CCI
 list covering the identifiers common to operating system and network STIGs. It
 is **not** the authoritative list. Download DISA's `U_CCI_List.xml` and load it
 on the Mappings page; it replaces the subset and re-checks every finding already
@@ -297,7 +285,7 @@ before anything is written, and whatever a restore replaces is saved to
 ## Layout
 
 ```
-cmd/enclave         the executable: serve, import, export, enclave
+cmd/enclave         the process in the image: serve, import, export, enclave
 internal/model      the domain: enclaves, assets, findings, assessments, risk
 internal/catalog    control frameworks, their profiles, and how they load
 internal/store      persistence: JSON files, in-memory indexes, atomic writes
@@ -320,20 +308,19 @@ Go 1.24 or later. No dependencies outside the standard library.
 
 ```
 go test ./...
-go build ./cmd/enclave
+go build ./cmd/enclave      # for development; the deliverable is the image
 
-# a Windows build to hand to somebody
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-  go build -trimpath -ldflags "-s -w -X main.version=$(git describe --tags --always)" \
-  -o ENCLAVE.exe ./cmd/enclave
-
-# the container image, and the test suite inside it
+# the image, and the test suite inside it
 docker build -t enclave:latest .
 docker build --target test .
 ```
 
 The image build needs no network beyond pulling its two base images: there are
 no modules to download.
+
+Releases are tagged images. `v*` on a tag builds and pushes
+`ghcr.io/gaterunner341/enclave:<tag>`, then publishes a release carrying the
+compose files pinned to it.
 
 ## Known limits
 
