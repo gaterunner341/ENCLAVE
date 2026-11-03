@@ -132,6 +132,19 @@ jobs:
             exit 1
           fi
 
+      - name: The proxy configuration is valid and formatted
+        run: |
+          set -eu
+          # Caddy complains in its own startup log about a Caddyfile that is
+          # not formatted, and that warning lands in the operator's logs every
+          # time the proxy starts. Catch it here instead.
+          docker run --rm -v "$PWD/deploy:/d:ro" caddy:2-alpine \
+            caddy fmt --diff /d/Caddyfile | tee /tmp/caddyfmt.diff
+          if grep -qE '^[-+]' /tmp/caddyfmt.diff; then
+            echo "deploy/Caddyfile is not formatted; the diff above is what caddy fmt wants" >&2
+            exit 1
+          fi
+
       - name: The compose file comes up, proxy and all
         run: |
           set -eux
@@ -151,9 +164,17 @@ jobs:
           # With one, straight through to ENCLAVE.
           curl -fsSk -u ci:ci-password https://localhost/healthz
 
-          # And plain HTTP is redirected rather than served.
+          # And plain HTTP is redirected rather than served. Caddy adds that
+          # redirect itself for an HTTPS site, so the exact code is its
+          # business; what matters is that nothing is answered in the clear.
           code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)"
-          test "$code" = "301"
+          case "$code" in
+            301 | 302 | 307 | 308) ;;
+            *)
+              echo "plain HTTP answered $code instead of redirecting" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Logs, whatever happened
         if: always()

@@ -17,6 +17,9 @@
 	# email security@example.gov
 }
 
+# Nothing is served in the clear, including the sign-in that would otherwise
+# carry the password: naming the HTTPS port here makes Caddy listen on 80 as
+# well and redirect everything that arrives there.
 {$ENCLAVE_HOSTNAME}:443 {
 	# A certificate from Caddy's own local authority. This needs no internet
 	# access, which is the point: it works on a closed network on the first
@@ -49,8 +52,6 @@
 	}
 
 	reverse_proxy enclave:8080 {
-		header_up X-Forwarded-Proto {scheme}
-
 		# A big import can take a while to come back.
 		transport http {
 			read_timeout 10m
@@ -62,10 +63,4 @@
 		output stdout
 		format console
 	}
-}
-
-# Anything arriving on plain HTTP is sent to HTTPS. Nothing is served in the
-# clear, including the sign-in that would otherwise carry the password.
-http://{$ENCLAVE_HOSTNAME} {
-	redir https://{host}{uri} permanent
 }
