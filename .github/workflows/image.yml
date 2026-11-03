@@ -1,0 +1,97 @@
+# Publishes the container image so that something which cannot build from
+# source — TrueNAS, Portainer, Unraid, a Kubernetes manifest — can pull it.
+#
+# The package starts PRIVATE even though the repository is public. Making it
+# pullable is a deliberate, separate step: on GitHub, Packages, enclave,
+# Package settings, Change visibility.
+
+name: Container image
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Build and push to GHCR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A registry path has to be lower case, and this repository is not.
+      - name: Work out the image name and tags
+        id: meta
+        run: |
+          set -eu
+          name="ghcr.io/$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          short="${GITHUB_SHA::8}"
+          tags="-t ${name}:sha-${short}"
+          version="$short"
+          case "${GITHUB_REF}" in
+            refs/tags/v*)
+              version="${GITHUB_REF_NAME}"
+              tags="$tags -t ${name}:${GITHUB_REF_NAME} -t ${name}:latest"
+              ;;
+            refs/heads/main)
+              tags="$tags -t ${name}:main -t ${name}:latest"
+              ;;
+          esac
+          echo "name=$name"       >> "$GITHUB_OUTPUT"
+          echo "tags=$tags"       >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # linux/amd64 only. TrueNAS runs on x86-64, and so does every other
+      # place this is likely to be pulled; cross-building for an architecture
+      # nobody is asking for would be slower builds in exchange for nothing.
+      - name: Build
+        run: |
+          docker build --target runtime \
+            --build-arg VERSION="${{ steps.meta.outputs.version }}" \
+            ${{ steps.meta.outputs.tags }} .
+
+      # The image is smoke tested before it is pushed, so a broken one cannot
+      # become the "latest" that somebody's TrueNAS pulls overnight.
+      - name: It serves before it is published
+        run: |
+          set -eux
+          img="${{ steps.meta.outputs.name }}:sha-${GITHUB_SHA::8}"
+          docker run -d --name verify \
+            --read-only --tmpfs /tmp:size=256m,mode=1777 \
+            -p 127.0.0.1:8080:8080 "$img"
+          for _ in $(seq 1 30); do
+            if docker exec verify /usr/local/bin/enclave healthcheck; then break; fi
+            sleep 1
+          done
+          docker exec verify /usr/local/bin/enclave healthcheck
+          curl -fsS -o /dev/null -X POST http://127.0.0.1:8080/enclaves/new \
+            -d 'name=Smoke&id=SMOKE&environment=Production&status=Active'
+          curl -fsS http://127.0.0.1:8080/enclaves | grep -q 'Smoke'
+          docker rm -f verify
+
+      - name: Push
+        run: docker push --all-tags "${{ steps.meta.outputs.name }}"
+
+      - name: Say where it went
+        run: |
+          {
+            echo "### Image published"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.name }}:latest"
+            echo "${{ steps.meta.outputs.name }}:sha-${GITHUB_SHA::8}"
+            echo '```'
+            echo
+            echo "The package is private until its visibility is changed under"
+            echo "Packages on the repository page."
+          } >> "$GITHUB_STEP_SUMMARY"

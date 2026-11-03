@@ -1,0 +1,80 @@
+# ENCLAVE on TrueNAS.
+#
+# Apps -> Discover Apps -> the three-dot menu -> Install via YAML, then paste
+# this in. Change the two marked lines first.
+#
+# Before you install, make the dataset and give it to the right user, or the
+# app will start and then fail to write anything:
+#
+#   Datasets -> add a dataset, e.g. tank/apps/enclave
+#   then from a shell (System -> Shell):
+#     chown -R 568:568 /mnt/tank/apps/enclave
+#
+# 568 is TrueNAS's own "apps" user. The line "user: 568:568" below is what
+# makes ENCLAVE run as it. Delete that line and the app runs as 65532, the
+# user baked into the image, and the dataset has to be chowned to that
+# instead — either works, but they have to agree.
+
+services:
+  enclave:
+    image: ghcr.io/gaterunner341/enclave:latest
+    restart: unless-stopped
+
+    # CHANGE THIS to the user that owns the dataset below.
+    user: "568:568"
+
+    environment:
+      # Inside the container ENCLAVE binds every interface. What the NAS
+      # exposes is decided by "ports".
+      ENCLAVE_ADDR: 0.0.0.0:8080
+      ENCLAVE_DATA: /data
+      # "on" serves the interface but refuses every change — for an instance
+      # an auditor or a programme office only reads.
+      ENCLAVE_READ_ONLY: "off"
+      # The zone timestamps are written in.
+      TZ: UTC
+
+    ports:
+      # NAS port : container port.
+      #
+      # Do not use 80 or 443. The TrueNAS web interface is on those, and the
+      # app will fail to start with a port conflict.
+      - "8080:8080"
+
+    volumes:
+      # CHANGE THIS to your dataset. Everything ENCLAVE knows lives here:
+      # enclaves, assets, findings, scans, catalogues, mappings, the people
+      # directory and connector credentials. Putting it on a dataset rather
+      # than in a Docker volume is what lets you snapshot and replicate it
+      # with everything else on the NAS.
+      - /mnt/tank/apps/enclave:/data
+
+      # Optional. A CA certificate for a Tenable Security Center signed by
+      # your own PKI goes in this dataset, and is then referenced on the
+      # connector as /certs/<filename>. Delete these two lines if you are not
+      # pulling from a Security Center.
+      # - /mnt/tank/apps/enclave-certs:/certs:ro
+
+    # ENCLAVE writes to the data dataset and nowhere else. The tmpfs is where
+    # a large scan upload spills while it is being parsed.
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/enclave", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

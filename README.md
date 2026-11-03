@@ -8,22 +8,89 @@ control baseline and answers the question the scanners cannot: **of the controls
 you are supposed to be meeting, which ones are you actually meeting, and how do
 you know?**
 
-It is a single executable with no dependencies outside the Go standard library.
-No installer, no database engine, no service account, and no outbound connection
-unless you configure one.
-
-## Get it
-
-A current Windows build sits at **[`ENCLAVE.exe`](ENCLAVE.exe)** in the root of
-this repository. Download it, put it anywhere, and double-click. Nothing to
-install.
-
-Every push also builds one under the CI workflow's artifacts, and the Release
-workflow publishes builds for Windows, macOS and Linux with checksums.
+It has no dependencies outside the Go standard library: no database engine, no
+service account, and no outbound connection unless you configure one. One
+container, one data directory.
 
 ## Run it
 
-No installer, no database, no admin rights.
+It is a YAML app. Paste this into TrueNAS (Apps, Discover Apps, the three-dot
+menu, Install via YAML), Portainer, Unraid, or save it as
+`docker-compose.yml` and run `docker compose up -d`.
+
+```yaml
+services:
+  enclave:
+    image: ghcr.io/gaterunner341/enclave:latest
+    restart: unless-stopped
+
+    # The user that owns the data directory below. 568 is the "apps" user on
+    # TrueNAS. Drop the line to run as 65532, the image's own user.
+    user: "568:568"
+
+    environment:
+      ENCLAVE_ADDR: 0.0.0.0:8080
+      ENCLAVE_DATA: /data
+      ENCLAVE_READ_ONLY: "off"   # "on" publishes results and allows no change
+      TZ: UTC
+
+    ports:
+      # Not 80 or 443 on a NAS — its own web interface is there.
+      - "8080:8080"
+
+    volumes:
+      # Everything ENCLAVE knows. Point it at a real directory or dataset so
+      # it can be snapshotted and backed up with everything else.
+      - /mnt/tank/apps/enclave:/data
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/enclave", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+```
+
+Create that directory and give it to the same user first, or the app starts
+and then cannot write:
+
+```
+mkdir -p /mnt/tank/apps/enclave
+chown -R 568:568 /mnt/tank/apps/enclave
+```
+
+Then open `http://your-host:8080`.
+
+**One thing to decide before anyone else uses it.** ENCLAVE has no accounts and
+no sign-in. Anyone who can reach that port can change every risk decision, and
+nothing records who did. On a LAN that may be fine; exposed any further it is
+not. [docs/deploying.md](docs/deploying.md) sets out the three ways to put
+something in front of it, and the repository ships one — a TLS-and-password
+proxy — in `docker-compose.yml` under `--profile tls`.
+
+The copy in this repository, with build-from-source, an opt-in proxy and
+settings in a `.env`, is [`docker-compose.yml`](docker-compose.yml); the
+paste-ready one above is [`deploy/truenas/enclave.yaml`](deploy/truenas/enclave.yaml).
+
+```
+git clone https://github.com/gaterunner341/ENCLAVE.git
+cd ENCLAVE
+docker compose up -d --build
+```
+
+### Or as a single executable
+
+It is still one static binary with no installer, for a laptop or a standalone
+machine. A current Windows build sits at **[`ENCLAVE.exe`](ENCLAVE.exe)** in the
+root of this repository — download it and double-click. Tagged releases carry
+Windows, macOS and Linux builds with checksums.
 
 ```
 ENCLAVE.exe                   # on Windows, or just double-click it
@@ -31,29 +98,10 @@ ENCLAVE.exe                   # on Windows, or just double-click it
 go run ./cmd/enclave          # from source
 ```
 
-It serves on <http://127.0.0.1:8080> and opens a browser. Press Ctrl+C to stop.
-Your data lands in `enclave-data` next to the executable.
-
-**[RUN.md](RUN.md) has the full walkthrough**: installing, the first five
-minutes, every command line flag, where the data lives, and what to do before
-putting it on a shared machine.
-
-### On a server, for a team
-
-```
-cp env.example .env           # optional; every default works
-docker compose up -d --build
-```
-
-That publishes on the server's own `127.0.0.1:8080` and nowhere else, so you
-reach it with `ssh -L 8080:127.0.0.1:8080 you@server` until you have decided
-what goes in front of it. ENCLAVE has no sign-in of its own, so something has
-to: your existing reverse proxy, or the TLS-and-password proxy bundled in the
-compose file under `--profile tls`.
-
-**[docs/deploying.md](docs/deploying.md) is the deployment guide**: the three
-ways to front it, every setting, backups, upgrades, where connector API keys
-should live, and what the compose file already does about hardening.
+It serves on <http://127.0.0.1:8080>, opens a browser, and keeps its data in
+`enclave-data` beside the executable. **[RUN.md](RUN.md)** is the walkthrough
+for that: the first five minutes, every command line flag, and where the data
+lives.
 
 ## What it does
 
@@ -238,7 +286,8 @@ before anything is written, and whatever a restore replaces is saved to
 ## Documentation
 
 - **[RUN.md](RUN.md)** — how to run it, the first five minutes, every command
-- **[docs/deploying.md](docs/deploying.md)** — running it on a server with Docker: what has to sit in front of it, every setting, backups, upgrades
+- **[docs/truenas.md](docs/truenas.md)** — the paste-ready YAML app: the image, the one permission step, backups and upgrades
+- **[docs/deploying.md](docs/deploying.md)** — running it as a YAML app: what has to sit in front of it, every setting, backups, upgrades, connector credentials
 - [docs/importing.md](docs/importing.md) — what is read from each file format, and the asset and finding identity rules
 - [docs/mappings.md](docs/mappings.md) — how findings reach controls, the CCI list, crosswalks between frameworks
 - [docs/risk-scoring.md](docs/risk-scoring.md) — exactly how the numbers are produced, and what they are not
@@ -262,6 +311,7 @@ Dockerfile          the image: static build, then Alpine and the CA bundle
 docker-compose.yml  the deployment, with an opt-in TLS and password proxy
 env.example         every deployment setting, with its default
 deploy/             the proxy's configuration, accounts, and certificates
+deploy/truenas/     the same deployment as one paste-ready YAML file
 ```
 
 ## Building

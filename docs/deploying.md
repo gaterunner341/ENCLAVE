@@ -4,6 +4,12 @@ Everything here is in three files at the top of the repository: `Dockerfile`,
 `docker-compose.yml`, and `env.example`. The supporting pieces are in
 `deploy/`.
 
+**For an appliance that takes a pasted YAML file** — TrueNAS, Portainer,
+Unraid — use [`deploy/truenas/enclave.yaml`](../deploy/truenas/enclave.yaml)
+and read [truenas.md](truenas.md) instead. It is the same deployment with the
+values written out and a published image rather than a build. Everything below
+about settings, backups, upgrades and credentials still applies.
+
 ---
 
 ## Read this part first
