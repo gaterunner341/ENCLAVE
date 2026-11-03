@@ -17,10 +17,6 @@ ARG ALPINE_VERSION=3
 
 FROM golang:${GO_VERSION}-alpine AS build
 
-# ca-certificates is installed here so the bundle can be copied into the
-# runtime image, which needs it to verify a Security Center's certificate.
-RUN apk add --no-cache ca-certificates
-
 WORKDIR /src
 
 # go.mod on its own first, so editing source does not invalidate this layer.
@@ -58,8 +54,10 @@ FROM alpine:${ALPINE_VERSION} AS runtime
 # Alpine rather than scratch on purpose. The image is around 20 MB either way
 # once the binary is in it, and having a shell means an operator can get at
 # "enclave backup" and look at the data directory on a box where something has
-# gone wrong. Nothing is installed beyond the certificate bundle.
-RUN apk add --no-cache ca-certificates tzdata \
+# gone wrong. Nothing is installed but the certificate bundle, which is what
+# verifies a Security Center's certificate on an outbound connection. The zone
+# database is compiled into the binary, so TZ works without tzdata here.
+RUN apk add --no-cache ca-certificates \
  && addgroup -g 65532 -S enclave \
  && adduser -u 65532 -S -G enclave -H -s /sbin/nologin enclave \
  && mkdir -p /data \
