@@ -57,7 +57,10 @@ FROM alpine:${ALPINE_VERSION} AS runtime
 # gone wrong. Nothing is installed but the certificate bundle, which is what
 # verifies a Security Center's certificate on an outbound connection. The zone
 # database is compiled into the binary, so TZ works without tzdata here.
-RUN apk add --no-cache ca-certificates \
+# su-exec is how the entry point drops out of root once it has made the data
+# directory usable. It is 10 KB and is the whole reason nobody has to prepare
+# anything before starting this container.
+RUN apk add --no-cache ca-certificates su-exec \
  && addgroup -g 65532 -S enclave \
  && adduser -u 65532 -S -G enclave -H -s /sbin/nologin enclave \
  && mkdir -p /data \
@@ -65,6 +68,8 @@ RUN apk add --no-cache ca-certificates \
  && chmod 0750 /data
 
 COPY --from=build /out/enclave /usr/local/bin/enclave
+COPY deploy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint
+RUN chmod 0755 /usr/local/bin/docker-entrypoint
 
 # Every serve option is read from the environment, so the image is configured
 # the way a container is configured rather than by rewriting a command line.
@@ -74,7 +79,12 @@ ENV ENCLAVE_DATA=/data \
     ENCLAVE_IN_CONTAINER=1 \
     TZ=UTC
 
-USER 65532:65532
+# Deliberately not "USER 65532". The container starts as root so that it can
+# take ownership of a directory bind-mounted from a host, which arrives owned
+# by whoever created it; the entry point then drops to PUID:PGID (65532 by
+# default) and the server itself never runs as root. Setting "user:" in a
+# compose file still works and skips all of that — then the directory has to
+# be owned correctly beforehand, which is the trade.
 WORKDIR /data
 EXPOSE 8080
 
@@ -87,5 +97,5 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["/usr/local/bin/enclave", "healthcheck"]
 
-ENTRYPOINT ["/usr/local/bin/enclave"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint"]
 CMD ["serve"]

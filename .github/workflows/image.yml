@@ -77,6 +77,13 @@ jobs:
           curl -fsS -o /dev/null -X POST http://127.0.0.1:8080/enclaves/new \
             -d 'name=Smoke&id=SMOKE&environment=Production&status=Active'
           curl -fsS http://127.0.0.1:8080/enclaves | grep -q 'Smoke'
+
+          # The container starts as root so it can take ownership of the data
+          # directory it is given. The process answering requests must not be,
+          # and an image that regressed on that must not be published.
+          docker exec verify ps -o user,comm | tee /tmp/ps.txt
+          test "$(awk '$2 == "enclave" { print $1; exit }' /tmp/ps.txt)" = "enclave"
+
           docker rm -f verify
 
       - name: Push

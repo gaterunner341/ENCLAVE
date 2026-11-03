@@ -1,30 +1,21 @@
-# ENCLAVE on TrueNAS.
+# ENCLAVE as a YAML app.
 #
-# Apps -> Discover Apps -> the three-dot menu -> Install via YAML, then paste
-# this in. Change the two marked lines first.
+# Paste this in and start it. Change one line: the directory on the left of
+# ":/data". Nothing has to be created or chowned first — the container takes
+# ownership of that directory itself and then drops to an unprivileged user,
+# so the server never runs as root.
 #
-# Before you install, make the dataset and give it to the right user, or the
-# app will start and then fail to write anything:
-#
-#   Datasets -> add a dataset, e.g. tank/apps/enclave
-#   then from a shell (System -> Shell):
-#     chown -R 568:568 /mnt/tank/apps/enclave
-#
-# 568 is TrueNAS's own "apps" user. The line "user: 568:568" below is what
-# makes ENCLAVE run as it. Delete that line and the app runs as 65532, the
-# user baked into the image, and the dataset has to be chowned to that
-# instead — either works, but they have to agree.
+# Works anywhere that takes a compose file: TrueNAS (Apps, Discover Apps, the
+# three-dot menu, Install via YAML), Portainer, Unraid, or "docker compose
+# up -d" on a plain machine.
 
 services:
   enclave:
     image: ghcr.io/gaterunner341/enclave:latest
     restart: unless-stopped
 
-    # CHANGE THIS to the user that owns the dataset below.
-    user: "568:568"
-
     environment:
-      # Inside the container ENCLAVE binds every interface. What the NAS
+      # Inside the container ENCLAVE binds every interface. What the machine
       # exposes is decided by "ports".
       ENCLAVE_ADDR: 0.0.0.0:8080
       ENCLAVE_DATA: /data
@@ -33,36 +24,48 @@ services:
       ENCLAVE_READ_ONLY: "off"
       # The zone timestamps are written in.
       TZ: UTC
+      # Who the server runs as, and who the data directory ends up owned by.
+      # 568 is the "apps" user on TrueNAS; leave these out entirely and it is
+      # 65532. Either way you do not have to prepare the directory.
+      PUID: "568"
+      PGID: "568"
 
     ports:
-      # NAS port : container port.
+      # Machine port : container port.
       #
-      # Do not use 80 or 443. The TrueNAS web interface is on those, and the
+      # Do not use 80 or 443 on a NAS. Its own web interface is there and the
       # app will fail to start with a port conflict.
       - "8080:8080"
 
     volumes:
-      # CHANGE THIS to your dataset. Everything ENCLAVE knows lives here:
-      # enclaves, assets, findings, scans, catalogues, mappings, the people
-      # directory and connector credentials. Putting it on a dataset rather
-      # than in a Docker volume is what lets you snapshot and replicate it
-      # with everything else on the NAS.
+      # CHANGE THIS. Everything ENCLAVE knows lives here: enclaves, assets,
+      # findings, scans, catalogues, mappings, the people directory and
+      # connector credentials. Pointing it at a real directory rather than a
+      # Docker volume is what lets you snapshot and replicate it with
+      # everything else on the machine.
       - /mnt/tank/apps/enclave:/data
 
       # Optional. A CA certificate for a Tenable Security Center signed by
-      # your own PKI goes in this dataset, and is then referenced on the
-      # connector as /certs/<filename>. Delete these two lines if you are not
-      # pulling from a Security Center.
+      # your own PKI goes in a second directory, referenced on the connector
+      # as /certs/<filename>. Delete if you are not pulling from one.
       # - /mnt/tank/apps/enclave-certs:/certs:ro
 
-    # ENCLAVE writes to the data dataset and nowhere else. The tmpfs is where
-    # a large scan upload spills while it is being parsed.
+    # ENCLAVE writes to the data directory and nowhere else. The tmpfs is
+    # where a large scan upload spills while it is being parsed.
     read_only: true
     tmpfs:
       - /tmp:size=512m,mode=1777
 
+    # Everything is dropped except what the entry point needs to hand the
+    # data directory over and step down out of root.
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     security_opt:
       - no-new-privileges:true
 

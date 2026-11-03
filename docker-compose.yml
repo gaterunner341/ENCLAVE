@@ -71,8 +71,18 @@ services:
     tmpfs:
       - /tmp:size=512m,mode=1777
 
+    # Everything is dropped except what the entry point needs to hand the data
+    # directory over to the unprivileged user it then steps down to. Set
+    # "user:" on this service instead and all five can go, at the cost of
+    # having to own the directory correctly beforehand.
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     security_opt:
       - no-new-privileges:true
 

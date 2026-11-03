@@ -83,18 +83,15 @@ jobs:
             --build-arg VERSION="ci-${GITHUB_SHA::8}" \
             -t enclave:ci .
 
-      - name: It runs as uid 65532, not root
-        run: |
-          id="$(docker run --rm --entrypoint id enclave:ci -u)"
-          echo "runs as uid $id"
-          test "$id" = "65532"
-
       - name: It works under the constraints the compose file imposes
         run: |
           set -eux
           docker run -d --name enclave-ci \
             --read-only --tmpfs /tmp:size=256m,mode=1777 \
-            --cap-drop ALL --security-opt no-new-privileges:true \
+            --cap-drop ALL \
+            --cap-add CHOWN --cap-add FOWNER --cap-add DAC_OVERRIDE \
+            --cap-add SETUID --cap-add SETGID \
+            --security-opt no-new-privileges:true \
             -v enclave-ci-data:/data \
             -p 127.0.0.1:8080:8080 \
             enclave:ci
@@ -122,6 +119,16 @@ jobs:
           # And that an operator can get a backup out of a running instance.
           docker exec enclave-ci /usr/local/bin/enclave backup -o /data/ci.zip
 
+          # The container starts as root so it can take ownership of the data
+          # directory, but the process serving requests must not be root. A
+          # regression here would hand an attacker the container.
+          docker exec enclave-ci ps -o user,comm | tee /tmp/ps.txt
+          test "$(awk '$2 == "enclave" { print $1; exit }' /tmp/ps.txt)" = "enclave"
+          if awk '$2 == "enclave" { print $1; exit }' /tmp/ps.txt | grep -qx root; then
+            echo "the server is running as root" >&2
+            exit 1
+          fi
+
       - name: The health check fails when there is nothing to answer
         run: |
           docker stop enclave-ci
@@ -140,10 +147,15 @@ jobs:
         run: |
           set -eux
           data="${RUNNER_TEMP}/enclave-data"
-          mkdir -p "$data"
-          sudo chown -R 568:568 "$data"
 
-          # Only the two lines the file tells people to change.
+          # Deliberately NOT prepared: owned by root, the way a directory
+          # made by an appliance or by Docker itself arrives. Nobody should
+          # have to chown anything before starting this, and the only way to
+          # know that holds is to never do it here.
+          sudo mkdir -p "$data"
+          sudo chown -R 0:0 "$data"
+
+          # Only the one line the file tells people to change.
           sed -e "s|ghcr.io/gaterunner341/enclave:latest|enclave:ci|" \
               -e "s|/mnt/tank/apps/enclave:/data|${data}:/data|" \
               deploy/truenas/enclave.yaml > "${RUNNER_TEMP}/truenas.yaml"
@@ -155,16 +167,19 @@ jobs:
           curl -fsS http://127.0.0.1:8080/enclaves | grep -q 'NAS'
 
           # The records have to land in the directory on the host, owned by
-          # the user the container runs as. That is the entire point of the
-          # bind mount, and it is what a snapshot of the dataset picks up.
+          # the PUID the file asks for rather than by root. That is both the
+          # point of the bind mount and the proof that the entry point took
+          # ownership and then stepped down.
           sudo test -f "${data}/enclaves.json"
           sudo stat -c '%u:%g' "${data}/enclaves.json" | grep -qx '568:568'
+          sudo stat -c '%u:%g' "${data}" | grep -qx '568:568'
 
           docker compose -p truenas -f "${RUNNER_TEMP}/truenas.yaml" down -v
 
-      # Forgetting the chown is the usual way this deployment fails, and with
-      # a restart policy it fails on a loop. What it says while doing that is
-      # the difference between a one-command fix and an afternoon.
+      # A deployment that names its own user skips the entry point's ownership
+      # step, which is the one remaining way to land on an unwritable
+      # directory. What it says then is the difference between a one-command
+      # fix and an afternoon.
       - name: An unwritable directory says what to do about it
         run: |
           set -eux
