@@ -18,7 +18,11 @@ into a box rather than cloning a repository:
 ## Before you paste it
 
 **Make the directory and give it to the right user.** This is the one step
-that, skipped, produces an app that starts and then cannot write:
+that, skipped, stops the app. It exits, and with `restart: unless-stopped` it
+does that on a loop, which from the outside looks like an app that will not
+start. It now says so in the log in as many words — `cannot write to the data
+directory`, and the `chown` to run — so if the app is stopping, read the log
+before anything else.
 
 ```bash
 mkdir -p /mnt/tank/apps/enclave
@@ -49,13 +53,14 @@ workflow, which smoke-tests the image before pushing it, so a broken build
 cannot become the `latest` something pulls overnight. `:sha-xxxxxxxx` pins an
 exact build and `:vN.N.N` a release.
 
-**The package starts private even though the repository is public.** Until its
-visibility is changed — on the repository page, Packages, `enclave`, Package
-settings, Change visibility — a pull will fail with `denied` or
-`unauthorized`. Either make it public, or log the machine in first:
+It is public, so nothing has to be logged in to pull it.
 
-```bash
-docker login ghcr.io -u YOUR_GITHUB_USERNAME
+If a package of your own ever does need its visibility changed, that setting
+is on your profile rather than on the repository — a package only appears in
+the repository sidebar once it has been linked to one:
+
+```
+https://github.com/users/YOUR_GITHUB_USERNAME/packages/container/PACKAGE/settings
 ```
 
 ### Or build it yourself

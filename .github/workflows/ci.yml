@@ -132,6 +132,56 @@ jobs:
             exit 1
           fi
 
+      # The file people paste into a NAS differs from the compose file at the
+      # root in the two ways most likely to break: it runs as a named user and
+      # it binds a directory on the host rather than a Docker volume. Both go
+      # untested if only the root compose file is exercised.
+      - name: The TrueNAS YAML works exactly as shipped
+        run: |
+          set -eux
+          data="${RUNNER_TEMP}/enclave-data"
+          mkdir -p "$data"
+          sudo chown -R 568:568 "$data"
+
+          # Only the two lines the file tells people to change.
+          sed -e "s|ghcr.io/gaterunner341/enclave:latest|enclave:ci|" \
+              -e "s|/mnt/tank/apps/enclave:/data|${data}:/data|" \
+              deploy/truenas/enclave.yaml > "${RUNNER_TEMP}/truenas.yaml"
+
+          docker compose -p truenas -f "${RUNNER_TEMP}/truenas.yaml" up -d --wait
+          curl -fsS http://127.0.0.1:8080/healthz
+          curl -fsS -o /dev/null -X POST http://127.0.0.1:8080/enclaves/new \
+            -d 'name=NAS&id=NAS&environment=Production&status=Active'
+          curl -fsS http://127.0.0.1:8080/enclaves | grep -q 'NAS'
+
+          # The records have to land in the directory on the host, owned by
+          # the user the container runs as. That is the entire point of the
+          # bind mount, and it is what a snapshot of the dataset picks up.
+          sudo test -f "${data}/enclaves.json"
+          sudo stat -c '%u:%g' "${data}/enclaves.json" | grep -qx '568:568'
+
+          docker compose -p truenas -f "${RUNNER_TEMP}/truenas.yaml" down -v
+
+      # Forgetting the chown is the usual way this deployment fails, and with
+      # a restart policy it fails on a loop. What it says while doing that is
+      # the difference between a one-command fix and an afternoon.
+      - name: An unwritable directory says what to do about it
+        run: |
+          set -eux
+          bad="${RUNNER_TEMP}/enclave-bad"
+          mkdir -p "$bad"
+          sudo chown -R 0:0 "$bad"
+          sudo chmod 0755 "$bad"
+
+          out="$(docker run --rm --user 568:568 -v "$bad":/data enclave:ci serve 2>&1 || true)"
+          echo "$out"
+          echo "$out" | grep -q "cannot write to the data directory"
+          echo "$out" | grep -q "chown -R 568:568"
+          if echo "$out" | grep -q '\.json\.tmp'; then
+            echo "the error named a temporary file again" >&2
+            exit 1
+          fi
+
       - name: The proxy configuration is valid and formatted
         run: |
           set -eu

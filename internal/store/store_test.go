@@ -1,6 +1,9 @@
 package store
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -385,4 +388,38 @@ func keysOf(m map[string]Placement) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// A data directory the process cannot write to is the single most common way
+// a containerised deployment fails: the directory on the host is owned by
+// somebody else, the container exits, and with a restart policy it does that
+// on a loop. What it must not do is fail later with the name of whichever
+// temporary file happened to be written first, which says nothing about the
+// ownership that actually needs fixing.
+func TestUnwritableDataDirectoryIsExplained(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root can write anywhere, so there is nothing to refuse")
+	}
+	dir := filepath.Join(t.TempDir(), "readonly")
+	if err := os.Mkdir(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Open(dir)
+	if err == nil {
+		t.Fatal("opening a directory that cannot be written should fail")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		dir,            // which directory
+		"not writable", // what is wrong
+		"chown",        // what to do about it
+		"user:",        // and the other way to resolve it
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("the error should mention %q, got:\n%s", want, msg)
+		}
+	}
+	if strings.Contains(msg, ".json.tmp") {
+		t.Error("the error should not name a temporary file; that is what made it unhelpful")
+	}
 }

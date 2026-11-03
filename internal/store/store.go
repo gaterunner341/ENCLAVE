@@ -13,7 +13,9 @@ package store
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,6 +25,65 @@ import (
 
 	"github.com/gaterunner341/enclave/internal/model"
 )
+
+// writable reports whether records can be created in dir, by creating one.
+// Asking the permission bits instead would be wrong under an ACL, which is
+// exactly the case that bites on a NAS.
+func writable(dir string) error {
+	f, err := os.CreateTemp(dir, ".enclave-write-check-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	_ = f.Close()
+	return os.Remove(name)
+}
+
+// writeProblem turns a refused write into something a person can act on. The
+// cause is nearly always ownership, and the fix is nearly always one command,
+// so both are in the message rather than in a document somebody has to find.
+func writeProblem(dir string, err error) error {
+	if !errors.Is(err, fs.ErrPermission) {
+		return fmt.Errorf("data directory %s: %w", dir, err)
+	}
+	who := "this user"
+	if uid := os.Getuid(); uid >= 0 {
+		who = fmt.Sprintf("uid %d, gid %d", uid, os.Getgid())
+	}
+	return fmt.Errorf(`cannot write to the data directory %s
+
+It is not writable by the user ENCLAVE is running as (%s), so there
+is nowhere to keep the records and nothing would be saved.
+
+If this is a container, the directory on the host that is mounted there has to
+be owned by that user:
+
+    chown -R %s %s
+
+Or change the "user:" line in the compose file to whoever already owns it. The
+two have to agree. An ACL that denies write will do this as well, even when
+the ownership looks right.
+
+(%w)`, dir, who, ownerArg(), hostHint(dir), err)
+}
+
+// ownerArg is the user:group to chown to, in the form the command takes.
+func ownerArg() string {
+	if uid := os.Getuid(); uid >= 0 {
+		return fmt.Sprintf("%d:%d", uid, os.Getgid())
+	}
+	return "YOUR_USER"
+}
+
+// hostHint names the directory to fix. Inside a container the path the message
+// would otherwise print is the one in the container, which is not the one the
+// person has to chown, so say which is which.
+func hostHint(dir string) string {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return "<the host directory mounted at " + dir + ">"
+	}
+	return dir
+}
 
 // Store holds every record and the indexes that make the pages fast enough to
 // render without pagination tricks.
@@ -58,7 +119,16 @@ type Store struct {
 // Open loads a store from dir, creating it when it does not exist.
 func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("data directory %s: %w", dir, err)
+		return nil, writeProblem(dir, err)
+	}
+	// Check now that records can actually be written, rather than failing on
+	// the first save with the name of whichever temporary file happened to go
+	// first. A directory mounted into a container and owned by the wrong user
+	// is the usual cause, and the error has to say so: a message naming
+	// "schema.json.tmp" tells somebody nothing about the chown they are
+	// missing.
+	if err := writable(dir); err != nil {
+		return nil, writeProblem(dir, err)
 	}
 	s := &Store{
 		dir:               dir,
